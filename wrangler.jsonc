@@ -2,7 +2,7 @@
 //  1. "name": samakan dengan nama Worker Anda yang sekarang (bagian depan alamat .workers.dev)
 //  2. "database_id": tempel ID database D1 "wiz-db" dari dashboard Cloudflare
 {
-  "name": "wiz-donasi-poso",
+  "name": "wizposo",
   "main": "src/worker.js",
   "compatibility_date": "2025-09-01",
   "assets": {
@@ -12,7 +12,7 @@
     "run_worker_first": ["/api/*"]
   },
   "d1_databases": [
-    { "binding": "DB", "database_name": "wiz-db", "database_id": "GANTI_DENGAN_ID_DATABASE_D1" }
+    { "binding": "DB", "database_name": "wiz-db", "database_id": "cf126b6c-9ab3-443b-a36a-72be801a3d50" }
   ],
   // Opsional: aktifkan unggah video langsung (tanpa YouTube).
   // Buat bucket R2 bernama "wiz-media" di dashboard, lalu hapus tanda // pada tiga baris di bawah.
