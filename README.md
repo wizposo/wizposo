@@ -94,6 +94,8 @@ Worker → **Settings** → **Domains & Routes** → **Add** → **Custom domain
 ## Salinan otomatis ke Google Drive
 Dashboard → **Penyimpanan**. Hubungkan satu atau beberapa akun Google Drive lewat Apps Script (kode di `google-drive/Code.gs`, panduan di `google-drive/PANDUAN-DRIVE.md`). Aplikasi menyalin data ke spreadsheet per tahun, menyimpan bukti transfer dan foto per tahun, membuat cadangan harian, dan berpindah otomatis ke Drive cadangan saat pemakaian mencapai 90%.
 
+**Banyak Drive = gudang yang terus bertambah.** Hanya satu Drive yang ditulisi (aktif); Drive yang penuh atau diarsipkan tetap dibaca. Setiap file tercatat di Drive mana disimpan, sehingga bukti transfer, slip, surat, dan foto lama tetap bisa dibuka dari aplikasi. File privat berumur lebih dari 30 hari dikeluarkan dari server setelah aman di Drive agar aplikasi tetap ringan. Drive aktif baru otomatis menerima salinan lengkap tahun berjalan dan data induk. Cadangan harian disimpan di Drive aktif dan Drive cadangan; menu **Penyimpanan → Cadangan & pemulihan** bisa memulihkan data yang hilang dari cadangan Drive mana pun (hanya menambah, tidak menimpa).
+
 Penyalinan berjalan di latar belakang: setiap 15 menit lewat cron (Cloudflare Workers) dan setiap kali admin membuka dashboard. Donatur tidak pernah menunggu Google, jadi aplikasi tetap cepat. Pada Cloudflare Pages (tanpa cron), penyalinan berjalan saat dashboard dibuka atau lewat tombol **Sinkronkan sekarang**.
 
 ## Menulis dokumentasi penyaluran
@@ -116,6 +118,7 @@ Cukup untuk ribuan donasi per hari.
 MOCK=1 MIDTRANS_SERVER_KEY=test-key node --no-warnings dev/server.mjs
 node --no-warnings dev/api-test.mjs
 node --no-warnings dev/field-test.mjs
+node --no-warnings dev/arsip-test.mjs
 ```
 Server uji memakai SQLite bawaan Node (versi 22.5 atau lebih baru) sebagai pengganti D1 dan meniru Midtrans dan Fonnte.
 

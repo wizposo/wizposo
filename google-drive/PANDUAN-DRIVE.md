@@ -36,3 +36,15 @@ Drive pertama langsung **aktif** dan seluruh data mulai disalin. Drive berikutny
 - Jangan bagikan Web app URL dan kode rahasia. Keduanya hanya disimpan di server aplikasi (tidak pernah tampil ke donatur).
 - Biarkan folder Drive **pribadi** (jangan "Anyone with the link"); data donatur adalah amanah.
 - Bila kode rahasia bocor: ganti `KODE_RAHASIA` di Apps Script, **Deploy → Manage deployments → Edit → New version**, lalu lepas dan hubungkan ulang Drive di dashboard.
+
+
+## Banyak Drive, tidak ada data yang hilang
+
+- Tambahkan Drive sebanyak yang diperlukan. Satu Drive **aktif** ditulisi; Drive **cadangan** menunggu giliran dan menyimpan salinan kedua cadangan harian; Drive **penuh** dan **arsip** tidak ditulisi tetapi tetap **dibaca**.
+- Setiap file (bukti transfer, slip, surat persetujuan, foto) dicatat lokasinya. Dari menu **Penyimpanan → Cari file tersimpan**, tekan **Lihat** untuk membuka file dari Drive mana pun.
+- **Lepas** pada Drive yang masih menyimpan file mengubahnya menjadi **arsip**, bukan menghapusnya, agar data lama tetap bisa dibuka. Jangan menghapus proyek Apps Script atau folder WIZ di Drive arsip.
+- Saat berpindah ke Drive aktif baru, transaksi tahun berjalan dan data induk disalin lengkap ke Drive baru.
+- **Cadangan & pemulihan**: unduh cadangan dari Drive mana pun, atau tekan **Pulihkan** untuk mengembalikan data yang hilang (hanya menambah, tidak menimpa).
+
+### Memperbarui konektor lama (versi 1 → 2)
+Konektor versi 2 menambahkan perintah untuk mengambil kembali file. Untuk setiap Drive yang ditandai "konektor perlu diperbarui": buka Apps Script di akun Google tersebut, tempel kode `Code.gs` terbaru (pastikan `KODE_RAHASIA` tetap sama), simpan, lalu **Terapkan → Kelola deployment → ikon pensil → Versi: Versi baru → Terapkan**. Alamat /exec tetap sama, tidak perlu menghubungkan ulang.

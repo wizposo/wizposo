@@ -9,6 +9,12 @@
  *  - Menyimpan file penting (bukti transfer, foto dokumentasi, slip) ke folder per tahun
  *  - Menyimpan cadangan lengkap harian (30 cadangan terakhir)
  *  - Melaporkan pemakaian kuota Drive
+ *  - Mengambil kembali file yang pernah disimpan (hanya file di dalam folder WIZ), agar
+ *    aplikasi bisa menampilkan data lama walau sudah dipindah ke Drive lain
+ *
+ * Versi konektor: 2. Bila memperbarui dari versi lama: tempel kode ini, pastikan KODE_RAHASIA
+ * sama seperti sebelumnya, Simpan, lalu Terapkan → Kelola deployment → Edit → Versi baru → Terapkan
+ * (alamat /exec tetap sama).
  *
  * CARA PASANG: lihat PANDUAN-DRIVE.md. Langkah singkat:
  *  1. Ganti KODE_RAHASIA di bawah dengan kode buatan Anda sendiri (minimal 16 karakter).
@@ -17,6 +23,7 @@
  */
 const KODE_RAHASIA = "GANTI-DENGAN-KODE-RAHASIA-ANDA";
 const SIMPAN_CADANGAN = 30;
+const VERSI = 2;
 
 /* ================= Pintu masuk ================= */
 function doGet() {
@@ -89,7 +96,7 @@ const ACTIONS = {
   // Info akun & kuota
   ping: function (req) {
     const used = DriveApp.getStorageUsed(), limit = DriveApp.getStorageLimit();
-    return { email: Session.getEffectiveUser().getEmail(), used: used, limit: limit, pct: limit ? Math.round(used / limit * 1000) / 10 : 0 };
+    return { email: Session.getEffectiveUser().getEmail(), used: used, limit: limit, pct: limit ? Math.round(used / limit * 1000) / 10 : 0, versi: VERSI };
   },
   // Siapkan folder
   setup: function (req) {
@@ -133,7 +140,15 @@ const ACTIONS = {
     while (it.hasNext()) files.push(it.next());
     files.sort(function (a, b) { return b.getDateCreated() - a.getDateCreated(); });
     files.slice(SIMPAN_CADANGAN).forEach(function (x) { x.setTrashed(true); });
-    return { url: f.getUrl(), size: f.getSize() };
+    return { id: f.getId(), url: f.getUrl(), size: f.getSize() };
+  },
+  // Ambil kembali file (hanya yang berada di dalam folder WIZ). req: {id}
+  get: function (req) {
+    const f = DriveApp.getFileById(req.id);
+    if (!dalamWiz_(f)) throw new Error("File di luar folder WIZ tidak boleh diambil.");
+    if (f.getSize() > 35 * 1024 * 1024) throw new Error("File terlalu besar untuk diambil lewat aplikasi. Buka langsung dari Google Drive.");
+    const b = f.getBlob();
+    return { name: f.getName(), mime: b.getContentType(), size: f.getSize(), data: Utilities.base64Encode(b.getBytes()) };
   },
   // Tautan file-file penting
   links: function (req) {
@@ -142,6 +157,20 @@ const ACTIONS = {
     return { root: root_(req.cabang).getUrl(), sheets: out };
   },
 };
+
+// Pastikan file berada di bawah folder induk WIZ (maksimal 4 tingkat)
+function dalamWiz_(file) {
+  const rootId = props_().getProperty("ROOT_ID");
+  if (!rootId) return false;
+  let level = [file.getParents()];
+  for (let depth = 0; depth < 4; depth++) {
+    const next = [];
+    for (const it of level) while (it.hasNext()) { const p = it.next(); if (p.getId() === rootId) return true; next.push(p.getParents()); }
+    if (!next.length) return false;
+    level = next;
+  }
+  return false;
+}
 
 /** Jalankan sekali dari editor (tombol Run) untuk memberi izin akses Drive & Sheets. */
 function izinkanAkses() {

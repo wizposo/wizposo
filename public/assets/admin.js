@@ -624,7 +624,7 @@ function uploadVideo(file, out) {
 
 /* ---------- Penyimpanan Google Drive ---------- */
 const gb = (b) => (b / 1073741824).toLocaleString("id-ID", { maximumFractionDigits: 2 }) + " GB";
-const DS = { aktif: ["Aktif", "st-paid"], cadangan: ["Cadangan", "st-pending"], penuh: ["Penuh · arsip", "st-failed"] };
+const DS = { aktif: ["Aktif (ditulisi)", "st-paid"], cadangan: ["Cadangan", "st-pending"], penuh: ["Penuh · tetap dibaca", "st-failed"], arsip: ["Arsip · tetap dibaca", "i"] };
 function usage(d) {
   const pct = d.pct || 0, col = pct >= 90 ? "var(--danger)" : pct >= 75 ? "var(--orange)" : "var(--green)";
   return `<div class="bar" style="margin:6px 0 4px"><i style="width:${Math.min(100, pct)}%;background:${col}"></i></div><small>${pct}% · ${gb(d.used || 0)} dari ${gb(d.limit || 0)}</small>`;
@@ -649,7 +649,7 @@ VIEWS.penyimpanan = async () => {
     <div class="g2"><div>
       <div class="panel"><h2>Drive terhubung</h2>${s.drives.length ? `<div class="list">${s.drives.map((d) => `<div class="it" style="align-items:flex-start"><span class="tx"><b style="word-break:break-all">${esc(d.email)}</b> <span class="tag ${DS[d.status][1]}">${DS[d.status][0]}</span>${usage(d)}
           <small>Terhubung ${tglD(d.added_at.replace("T", " ").slice(0, 19))}${d.root ? ` · <a href="${esc(d.root)}" target="_blank" rel="noopener">Buka folder</a>` : ""}</small></span>
-          <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${d.status === "cadangan" ? `<button class="btn ghost xs" data-act="${d.id}">Jadikan aktif</button>` : ""}${d.status !== "aktif" ? `<button class="btn danger xs" data-rm="${d.id}">Lepas</button>` : ""}</span></div>`).join("")}</div>`
+          <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${(d.status === "cadangan" || d.status === "arsip") && d.pct < s.batas ? `<button class="btn ghost xs" data-act="${d.id}">Jadikan aktif</button>` : ""}${d.status !== "aktif" && !(d.status === "arsip" && (d.files || d.backups)) ? `<button class="btn danger xs" data-rm="${d.id}">${d.files || d.backups ? "Arsipkan" : "Lepas"}</button>` : ""}</span></div>`).join("")}</div>`
         : `<p class="hint">Belum ada. Ikuti panduan di samping, lalu tempel link Web app di bawah.</p>`}
         <div class="sect">Hubungkan Google Drive</div>
         ${field("dv_url", "Link Web app Apps Script", "", { ph: "https://script.google.com/macros/s/…/exec" })}
@@ -663,7 +663,8 @@ VIEWS.penyimpanan = async () => {
           <div class="it"><span class="tx"><b>02 Bukti Transfer</b><small>Foto bukti dari donatur, dipisah per tahun</small></span></div>
           <div class="it"><span class="tx"><b>03 Slip Setoran</b><small>Slip setoran lapangan (PNG), per tahun</small></span></div>
           <div class="it"><span class="tx"><b>04 Dokumentasi</b><small>Foto program dan laporan penyaluran, per tahun</small></span></div>
-          <div class="it"><span class="tx"><b>05 Cadangan</b><small>Cadangan lengkap harian (dikompres), 30 hari terakhir</small></span></div>
+          <div class="it"><span class="tx"><b>05 Cadangan</b><small>Cadangan lengkap harian (dikompres), 30 terakhir per Drive; salinan kedua di Drive cadangan</small></span></div>
+          <div class="it"><span class="tx"><b>06 Surat Persetujuan · 07 Foto Lokasi</b><small>Surat persetujuan pundi dan foto rumah/titik, per tahun</small></span></div>
         </div></div>
     </div><div>
       <div class="panel"><h2>Panduan: hubungkan Google Drive (10 menit)</h2>
@@ -676,7 +677,7 @@ VIEWS.penyimpanan = async () => {
           <li><b>Deploy → New deployment</b> → jenis <b>Web app</b> → Execute as: <b>Me</b> → Who has access: <b>Anyone</b> → <b>Deploy</b>.</li>
           <li>Salin <b>Web app URL</b>, tempel bersama kode rahasia di formulir "Hubungkan Google Drive", lalu klik <b>Tes & hubungkan</b>.</li>
         </ol>
-        <div class="info">${ic("bell")}<span>Akun Google gratis berkapasitas 15 GB (dipakai bersama Gmail & Google Foto). Aplikasi hanya memakai sampai <b>${s.batas}%</b>. Saat batas tercapai, aplikasi pindah ke Drive cadangan atau mengirim WhatsApp ke admin untuk menambah link baru. Drive lama tetap menyimpan arsipnya.</span></div>
+        <div class="info">${ic("bell")}<span>Akun Google gratis berkapasitas 15 GB (dipakai bersama Gmail & Google Foto). Aplikasi hanya memakai sampai <b>${s.batas}%</b>. Saat batas tercapai, aplikasi pindah ke Drive cadangan atau mengirim WhatsApp ke admin untuk menambah link baru. Drive lama tetap menyimpan arsipnya dan <b>isinya tetap bisa dibuka dari aplikasi</b>, jadi semakin banyak Drive semakin besar gudangnya.</span></div>
       </div></div></div>`);
   $("#dv_code").onclick = async () => { try { const t = await (await fetch("/assets/wiz-drive-connector.gs.txt")).text(); copy(t, "Kode konektor"); } catch { toast("Gagal memuat kode"); } };
   $("#dv_add").onclick = (e) => busy(e.currentTarget, async () => {

@@ -69,15 +69,19 @@ http.createServer(async (req, res) => {
     const chunks = []; for await (const c of req) chunks.push(c);
     const q = JSON.parse(Buffer.concat(chunks).toString()); const a = gasAcc(url.searchParams.get("acc")); let r;
     if (q.secret !== "rahasia-uji-123") r = { ok: false, error: "Kode rahasia tidak cocok." };
-    else if (q.action === "ping") r = { ok: true, email: `wizposo.data${url.searchParams.get("acc")}@gmail.com`, used: a.used, limit: a.limit, pct: Math.round(a.used / a.limit * 1000) / 10 };
+    else if (q.action === "ping") r = { ok: true, email: `wizposo.data${url.searchParams.get("acc")}@gmail.com`, used: a.used, limit: a.limit, pct: Math.round(a.used / a.limit * 1000) / 10, ...(String(url.searchParams.get("acc")).startsWith("v1") ? {} : { versi: 2 }) };
     else if (q.action === "setup") r = { ok: true, root: "https://drive.google.com/drive/folders/root" + url.searchParams.get("acc"), folders: {} };
     else if (q.action === "upsert") { const sh = ((a.sheets[q.file] ||= {})[q.sheet] ||= new Map()); q.rows.forEach((row) => sh.set(String(row[0]), row)); a.used += 2000 * q.rows.length; r = { ok: true, appended: q.rows.length, updated: 0, url: "https://docs.google.com/x" }; }
-    else if (q.action === "upload") { a.files[`${q.folder}/${q.year}/${q.name}`] = q.data.length; a.used += q.data.length; r = { ok: true, id: "f", url: "https://drive.google.com/file/" + q.name }; }
-    else if (q.action === "backup") { a.backups.push(q.name); a.used += q.json.length / 5; r = { ok: true, url: "https://drive.google.com/b", size: q.json.length / 5 }; }
+    else if (q.action === "upload") { const id = "g" + Math.random().toString(36).slice(2, 14) + "abcdefghij"; a.files[`${q.folder}/${q.year}/${q.name}`] = q.data.length; (a.byId ||= {})[id] = { mime: q.mime, data: q.data, name: q.name }; a.used += q.data.length; r = { ok: true, id, url: `https://drive.google.com/file/d/${id}/view` }; }
+    else if (q.action === "backup") { const { gzipSync } = await import("node:zlib"); const id = "b" + Math.random().toString(36).slice(2, 14) + "abcdefghij"; const gz = gzipSync(Buffer.from(q.json)); (a.byId ||= {})[id] = { mime: "application/gzip", data: gz.toString("base64"), name: q.name + ".json.gz" }; a.backups.push(q.name); a.used += gz.length; r = { ok: true, id, url: `https://drive.google.com/file/d/${id}/view`, size: gz.length }; }
+    else if (q.action === "get") { const f = a.byId?.[q.id]; r = f ? { ok: true, ...f, size: f.data.length } : { ok: false, error: "File tidak ditemukan" }; if (String(url.searchParams.get("acc")).startsWith("v1")) r = { ok: false, error: "Perintah tidak dikenal: get" }; }
+    else if (q.action === "links") r = { ok: true, root: "https://drive.google.com/drive/folders/root" + url.searchParams.get("acc"), sheets: Object.fromEntries(Object.keys(a.sheets).map((k) => [k, "https://docs.google.com/spreadsheets/" + encodeURIComponent(k)])) };
     else r = { ok: false, error: "aksi?" };
     const t = Math.random().toString(36).slice(2); gasOut.set(t, JSON.stringify(r));
     res.statusCode = 302; res.setHeader("location", `/__gas/echo?t=${t}`); return res.end();
   }
+  // Khusus uji: jalankan SQL langsung (tidak ada di Cloudflare)
+  if (url.pathname === "/__sql" && req.method === "POST") { const chunks = []; for await (const c of req) chunks.push(c); const { sql, args = [] } = JSON.parse(Buffer.concat(chunks).toString()); res.setHeader("content-type", "application/json"); try { const st = db.prepare(sql); return res.end(JSON.stringify(/^\s*select/i.test(sql) ? st.all(...args) : st.run(...args))); } catch (e) { res.statusCode = 400; return res.end(JSON.stringify({ error: e.message })); } }
   if (url.pathname === "/__sent") { res.setHeader("content-type", "application/json"); return res.end(JSON.stringify(sent)); }
   if (url.pathname.startsWith("/api/")) {
     const chunks = []; for await (const c of req) chunks.push(c);

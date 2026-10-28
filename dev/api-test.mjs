@@ -108,7 +108,7 @@ r = await call("GET", "admin/drive", null, adm); const sts = Object.fromEntries(
 ok(sts["wizposo.data1@gmail.com"] === "penuh" && sts["wizposo.data2@gmail.com"] === "aktif" && !r.data.alert, "status: Drive 1 arsip, Drive 2 aktif");
 await call("POST", `admin/donations/${nid}/status`, { status: "paid" }, adm);
 r = await call("POST", "admin/drive/sync", {}, adm); st = await (await fetch("http://localhost:8788/__gas/state")).json();
-ok(st["2"].sheets["Transaksi 2026"]?.Donasi === 1, "data berikutnya tersimpan di Drive 2");
+ok(st["2"].sheets["Transaksi 2026"]?.Donasi >= 2, "Drive 2 berisi salinan lengkap tahun berjalan + data berikutnya");
 await fetch("http://localhost:8788/__gas/set?acc=2&used=" + 13.7e9);
 r = await call("POST", "admin/drive/sync", {}, adm);
 r = await call("GET", "admin/drive", null, adm); ok(r.data.alert === "penuh", "semua Drive penuh → peringatan tambah link baru");
