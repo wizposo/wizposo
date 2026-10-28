@@ -1,0 +1,21 @@
+{
+ "name": "WIZ Poso Petugas",
+ "short_name": "WIZ Petugas",
+ "start_url": "/admin",
+ "scope": "/",
+ "display": "standalone",
+ "background_color": "#F4F7F6",
+ "theme_color": "#046B5C",
+ "icons": [
+  {
+   "src": "/assets/icon-192.png",
+   "sizes": "192x192",
+   "type": "image/png"
+  },
+  {
+   "src": "/assets/icon.png",
+   "sizes": "512x512",
+   "type": "image/png"
+  }
+ ]
+}

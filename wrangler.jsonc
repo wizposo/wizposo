@@ -1,0 +1,25 @@
+// Konfigurasi Cloudflare Workers. Ubah dua hal sebelum deploy:
+//  1. "name": samakan dengan nama Worker Anda yang sekarang (bagian depan alamat .workers.dev)
+//  2. "database_id": tempel ID database D1 "wiz-db" dari dashboard Cloudflare
+{
+  "name": "wiz-donasi-poso",
+  "main": "src/worker.js",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "wiz-db", "database_id": "GANTI_DENGAN_ID_DATABASE_D1" }
+  ],
+  // Opsional: aktifkan unggah video langsung (tanpa YouTube).
+  // Buat bucket R2 bernama "wiz-media" di dashboard, lalu hapus tanda // pada tiga baris di bawah.
+  // "r2_buckets": [
+  //   { "binding": "MEDIA", "bucket_name": "wiz-media" }
+  // ],
+  // Salin data ke Google Drive setiap 15 menit (di latar belakang, tidak memperlambat aplikasi)
+  "triggers": { "crons": ["*/15 * * * *"] },
+  "observability": { "enabled": true }
+}
