@@ -682,7 +682,7 @@ VIEWS.penyimpanan = async () => {
   $("#dv_code").onclick = async () => { try { const t = await (await fetch("/assets/wiz-drive-connector.gs.txt")).text(); copy(t, "Kode konektor"); } catch { toast("Gagal memuat kode"); } };
   $("#dv_add").onclick = (e) => busy(e.currentTarget, async () => {
     const d = await api("admin/drive", { method: "POST", body: { url: val("dv_url"), secret: val("dv_sec") } });
-    toast(d.status === "aktif" ? `Terhubung ke ${d.email}. Penyalinan data dimulai.` : `Terhubung sebagai Drive ${d.status}.`); VIEWS.penyimpanan();
+    toast(d.diperbarui ? `Kode rahasia ${d.email} diperbarui. Konektor versi ${d.versi}.` : d.status === "aktif" ? `Terhubung ke ${d.email}. Penyalinan data dimulai.` : `Terhubung sebagai Drive ${d.status}.`); VIEWS.penyimpanan();
   });
   const run = async (btn, backup) => { btn.disabled = true; const t = btn.innerHTML; btn.textContent = "Memproses…";
     try { const r = await api("admin/drive/sync", { method: "POST", body: { backup } }); toast(`Tersalin: ${r.donasi || 0} transaksi, ${r.induk || 0} data induk, ${r.file || 0} file${r.backup ? ", cadangan dibuat" : ""}`); VIEWS.penyimpanan(); }
