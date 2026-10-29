@@ -5,6 +5,19 @@
    Drive mana pun bisa dipakai untuk memulihkan data yang hilang.
    ============================================================ */
 "use strict";
+// Salin ke papan klip yang lebih andal (browser HP/ panel Claude kadang menolak navigator.clipboard).
+window.copy = function (t, l) {
+  const done = () => toast(l + " disalin");
+  const manual = () => {
+    const ta = document.createElement("textarea");
+    ta.value = t; ta.setAttribute("readonly", ""); ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, t.length);
+    let ok = false; try { ok = document.execCommand("copy"); } catch {}
+    ta.remove();
+    ok ? done() : toast("Gagal menyalin otomatis. Salin manual: " + (t.length > 80 ? t.slice(0, 80) + "…" : t));
+  };
+  try { navigator.clipboard ? navigator.clipboard.writeText(t).then(done, manual) : manual(); } catch { manual(); }
+};
 (() => {
   const asli = VIEWS.penyimpanan;
   const ukuran = (b) => (b >= 1e9 ? (b / 1e9).toLocaleString("id-ID", { maximumFractionDigits: 2 }) + " GB" : b >= 1e6 ? (b / 1e6).toLocaleString("id-ID", { maximumFractionDigits: 1 }) + " MB" : Math.round((b || 0) / 1e3) + " KB");
@@ -41,7 +54,25 @@
         <p class="hint" style="margin-top:0">Cadangan lengkap dibuat setiap hari dan disalin ke Drive aktif serta Drive cadangan. <b>Pulihkan</b> hanya menambahkan data yang hilang, tidak pernah menimpa atau menghapus data yang ada.</p>
         <div class="tw" id="ar_bk"></div></div>`;
     $("#main").appendChild(box);
-    $("#ar_code")?.addEventListener("click", async (e) => { e.preventDefault(); try { copy(await (await fetch("/assets/wiz-drive-connector.gs.txt")).text(), "Kode konektor"); } catch { toast("Gagal memuat kode"); } });
+    // Kode konektor ditampilkan dalam kotak: bisa disalin dengan tombol, ditandai manual, atau dibuka sebagai halaman teks.
+    $("#ar_code")?.addEventListener("click", async (e) => {
+      e.preventDefault();
+      let kode = "";
+      try { kode = await (await fetch("/assets/wiz-drive-connector.gs.txt", { cache: "no-store" })).text(); } catch { return toast("Gagal memuat kode. Periksa sinyal."); }
+      modal("Kode konektor terbaru",
+        `<p class="hint" style="margin-top:0">Tekan <b>Salin kode</b>, lalu di Apps Script hapus semua kode lama dan tempel. Setelah itu ganti baris <code>const KODE_RAHASIA = "…"</code> dengan kode rahasia Anda yang lama.</p>
+         <textarea id="ar_kode" readonly spellcheck="false" style="width:100%;height:260px;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;padding:10px;border:1px solid var(--line,#ddd);border-radius:10px;white-space:pre"></textarea>
+         <p class="hint">Tidak bisa disalin? <a href="/assets/wiz-drive-connector.gs.txt" target="_blank" rel="noopener">Buka sebagai halaman teks</a>, lalu tekan lama / Ctrl+A untuk pilih semua dan salin.</p>`,
+        `<button class="btn" id="ar_kode_c">${ic("copy", 16)} Salin kode</button>`, true);
+      const ta = $("#ar_kode"); ta.value = kode;
+      $("#ar_kode_c").onclick = () => {
+        ta.focus(); ta.select(); ta.setSelectionRange(0, kode.length);
+        let ok = false; try { ok = document.execCommand("copy"); } catch {}
+        if (ok) return toast("Kode konektor disalin");
+        if (navigator.clipboard) navigator.clipboard.writeText(kode).then(() => toast("Kode konektor disalin"), () => toast("Kode sudah ditandai. Tekan Ctrl+C / Salin."));
+        else toast("Kode sudah ditandai. Tekan Ctrl+C / Salin.");
+      };
+    });
 
     // Spreadsheet per Drive
     $$("[data-ln]").forEach((b) => b.onclick = () => busy(b, async () => {
