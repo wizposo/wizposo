@@ -608,18 +608,34 @@ function bagikanForm(m, after) {
 VIEWS.akun = async () => {
   const me = await api("field/me");
   FM.me_ttd = me.ttd || false;
+  const TARIK_LBL = { diajukan: ["Menunggu", "background:#FFF4DC;color:#8A5A00"], disetujui: ["Dibayar", "background:#E3F4EC;color:#0B6B4A"], ditolak: ["Ditolak", "background:#FBE6E3;color:#A23B2A"] };
+  const up = me.upah || {};
+  const saldoPanel = can("slip") && me.upah ? `<div class="panel"><h2>${ic("cash")} Saldo upah saya</h2>
+    <div class="receipt" style="box-shadow:none;border:1px solid var(--line)"><div class="rr"><span>Saldo tersedia</span><b>${rp(up.tersedia)}</b></div><div class="rr"><span>Menunggu persetujuan</span><b>${rp(up.diajukan)}</b></div><div class="rr"><span>Sudah dibayar</span><b>${rp(up.dibayar)}</b></div></div>
+    <p class="hint">Upah ${up.persen}% dari infak dan sedekah yang Anda setorkan. Dana zakat tidak dihitung sebagai upah.</p>
+    ${up.tersedia > 0 && up.tersedia >= (me.tarik_min || 0) ? `<div style="margin-top:10px">${field("trf_nom", "Nominal tarik (Rp)", "", { hint: `Minimal ${rp(me.tarik_min)}, maksimal ${rp(up.tersedia)}.` })}${field("trf_rek", "Bank / e-wallet dan nomor rekening", "", { ph: "Contoh: BSI 7123456789 a.n. Ahmad" })}<button class="btn primary sm" id="trf_s">Ajukan penarikan</button></div>` : `<p class="hint">Penarikan dapat diajukan setelah saldo mencapai ${rp(me.tarik_min)}.</p>`}
+    ${me.tarik?.length ? `<h3 style="margin-top:14px">Riwayat penarikan</h3><div class="tw"><table class="t"><thead><tr><th>Tanggal</th><th class="num">Nominal</th><th>Status</th></tr></thead><tbody>${me.tarik.map((t) => `<tr><td>${tglD(t.created_at)}</td><td class="num">${rp(t.nominal)}</td><td><span class="tag" style="${TARIK_LBL[t.status]?.[1] || ""}">${TARIK_LBL[t.status]?.[0] || t.status}</span>${t.status === "ditolak" && t.catatan ? `<small>${esc(t.catatan)}</small>` : ""}</td></tr>`).join("")}</tbody></table></div>` : ""}
+  </div>` : "";
   main(`<div class="ph"><h1>Akun saya</h1></div>
     <div class="g2"><div class="panel"><h2>${ic("user")} ${esc(me.nama)}</h2>
       <div class="receipt" style="box-shadow:none;border:1px solid var(--line)"><div class="rr"><span>Peran</span><b>${esc(ME.role_label || me.role)}</b></div>${me.wa ? `<div class="rr"><span>WhatsApp</span><b>+${esc(me.wa)}</b></div>` : ""}
         ${me.email && !String(me.email).startsWith("wa:") ? `<div class="rr"><span>Email</span><b>${esc(me.email)}</b></div>` : ""}${me.wilayah ? `<div class="rr"><span>Wilayah</span><b>${esc(me.wilayah)}</b></div>` : ""}
-        ${can("slip") ? `<div class="rr"><span>Uang di tangan</span><b>${rp(me.kas.total)} (${me.kas.slip} slip)</b></div>` : ""}</div>
+        ${can("slip") ? `<div class="rr"><span>Uang di tangan</span><b>${rp(me.kas.total)} (${me.kas.slip} slip)</b></div>` : ""}
+        ${can("slip") && me.upah ? `<div class="rr"><span>Total setoran saya</span><b>${rp(me.upah.setoran)} (${me.upah.slip} slip)</b></div>
+        <div class="rr"><span>Saldo upah saya <small>(${me.upah.persen}% dari infak & sedekah)</small></span><b>${rp(me.upah.upah)}</b></div>` : ""}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn ghost sm" id="ak_pw">Ganti kata sandi</button><button class="btn danger sm" id="ak_out">${ic("logout")} Keluar</button></div>
       <p class="hint" style="margin-top:14px">Tips: buka menu browser → <b>Tambahkan ke layar utama</b> agar aplikasi petugas bisa dibuka seperti aplikasi biasa.</p></div>
+    ${saldoPanel}
     ${can("slip") ? `<div class="panel"><h2>${ic("receipt")} Tanda tangan saya</h2><p class="hint" style="margin-top:0">Dipakai di kotak <b>Pengesahan Wahdah Inspirasi Zakat</b> pada setiap slip yang Anda buat.</p>
       ${me.ttd ? `<div class="ttd-now"><img src="${me.ttd}" alt="Tanda tangan"></div>` : ""}<div id="ak_ttd"></div>
       <div style="display:flex;gap:8px;margin-top:10px"><button class="btn primary sm" id="ak_ttd_s">${ic("check")} Simpan tanda tangan</button></div></div>` : ""}</div>`);
   const pad = can("slip") ? DOK.pad($("#ak_ttd"), { ph: me.ttd ? "Buat tanda tangan baru di sini" : "Tanda tangan di sini" }) : null;
   $("#ak_ttd_s")?.addEventListener("click", async () => { const d = pad.toDataURL(); if (!d) return toast("Buat tanda tangan dulu."); await api("field/me", { method: "PUT", body: { ttd: d } }); toast("Tanda tangan disimpan"); VIEWS.akun(); });
+  $("#trf_s")?.addEventListener("click", (e) => busy(e.target, async () => {
+    const nominal = Number($("#trf_nom").value) || 0, rekening = $("#trf_rek").value.trim();
+    await api("field/tarik", { method: "POST", body: { nominal, rekening } });
+    toast("Permintaan penarikan terkirim. Menunggu persetujuan admin."); VIEWS.akun();
+  }));
   $("#ak_out").onclick = async () => { try { localStorage.removeItem("wiz_boot"); } catch {} await api("admin/logout", { method: "POST" }); boot(); };
   $("#ak_pw").onclick = () => { modal("Ganti kata sandi", field("cp_l", "Kata sandi lama", "", { type: "password" }) + field("cp_b", "Kata sandi baru", "", { type: "password", hint: ["zisko", "amplop"].includes(ME.role) ? "Minimal 6 karakter." : "Minimal 8 karakter." }), `<button class="btn primary sm" id="cp_s">Simpan</button>`);
     $("#cp_s").onclick = (e) => busy(e.target, async () => { await api("admin/password", { method: "POST", body: { lama: $("#cp_l").value, baru: $("#cp_b").value } }); closeModal(); toast("Kata sandi diganti"); }); };

@@ -437,6 +437,7 @@ route(/^#\/mitra$/, async () => {
       <p style="margin:0">${me.me.status === "aktif" ? "Setiap donasi lewat tautan Anda tercatat otomatis dan Anda mendapat notifikasi WhatsApp." : "Akun Anda menunggu persetujuan admin."}</p></section>
     <div class="tiles" style="margin-top:12px"><div class="s"><small>Total terkumpul</small><b>${rpk(me.stat.total)}</b></div><div class="s"><small>Bulan ini</small><b>${rpk(me.stat.bulan_ini)}</b></div>
       <div class="s"><small>Donasi</small><b>${me.stat.n}</b></div><div class="s"><small>Peringkat</small><b>${me.rank ? "#" + me.rank : "-"} <small>dari ${me.peserta}</small></b></div></div>
+    ${saldoCard(me)}
     ${me.apresiasi ? `<div class="info">${ic("trophy", 20)}<span>${esc(me.apresiasi)}</span></div>` : ""}
     <div class="sec"><h2>Tautan ajakan Anda</h2></div>
     <div class="linkrow"><span class="ib">${ic("link")}</span><span class="tx"><b>Semua program</b><span>${origin}/?ref=${esc(me.me.kode)}</span></span>
@@ -450,7 +451,33 @@ route(/^#\/mitra$/, async () => {
     <div class="card">${me.recent.length ? me.recent.map((d) => `<div class="drow"><span class="av">${esc(d.nama[0])}</span><span class="tx"><b>${esc(d.nama)} · ${rp(d.total)}</b><small style="color:var(--muted)">${esc(d.program || "")} · ${d.status === "paid" ? "lunas" : "menunggu"} · ${ago(d.waktu)}</small></span></div>`).join("") : `<p style="margin:0;color:var(--muted)">Belum ada. Bagikan tautan Anda ke keluarga, grup pengajian, dan rekan kerja.</p>`}</div>
     <button class="btn plain block" style="margin-top:12px" id="fr_out">${ic("logout", 18)} Keluar</button>`);
   $("#fr_out").onclick = async () => { await api("fr/logout", { method: "POST" }); router(); };
+  $("#trf")?.addEventListener("submit", async (e) => {
+    e.preventDefault(); const er = $("#trf_err"); er.hidden = true;
+    const nominal = Math.round(Number($("#trf_nom").value) || 0), rekening = $("#trf_rek").value.trim();
+    try { await api("fr/tarik", { method: "POST", body: { nominal, rekening } }); toast("Permintaan tarik saldo terkirim ke admin"); router(); }
+    catch (x) { er.textContent = x.message; er.hidden = false; }
+  });
 });
+// Kartu saldo komisi: saldo tersedia, status penarikan, dan form pengajuan tarik saldo
+const TARIK_STATUS = { diajukan: ["Menunggu", "background:#FFF4DC;color:#8A5A00"], disetujui: ["Dibayar", "background:#E3F4EC;color:#0B6B4A"], ditolak: ["Ditolak", "background:#FBE6E3;color:#A23B2A"] };
+function saldoCard(me) {
+  const s = me.saldo || { tersedia: 0, diperoleh: 0, dibayar: 0, diajukan: 0 }, k = me.komisi || { persen: 0, tarik_min: 0 };
+  const bisa = s.tersedia >= k.tarik_min && s.tersedia > 0;
+  return `<div class="card" style="margin-top:12px">
+    <small style="color:var(--muted)">Saldo komisi Anda</small>
+    <div style="font-size:26px;font-weight:800;margin:2px 0">${rpk(s.tersedia)}</div>
+    <small style="color:var(--muted)">Komisi ${k.persen}% dari donasi lunas lewat tautan Anda · diperoleh ${rpk(s.diperoleh)}${s.diajukan ? ` · menunggu persetujuan ${rpk(s.diajukan)}` : ""}</small>
+    ${bisa ? `<form id="trf" novalidate style="margin-top:12px">
+        <label class="f" for="trf_nom" style="margin-top:0">Jumlah yang ditarik</label><div class="inp"><span>Rp</span><input id="trf_nom" inputmode="numeric" value="${s.tersedia}"></div>
+        <label class="f" for="trf_rek">Tujuan transfer</label><div class="inp"><input id="trf_rek" placeholder="Bank / e-wallet, nomor rekening, atas nama"></div>
+        <div class="err" id="trf_err" hidden></div>
+        <button class="btn primary block" style="margin-top:12px" type="submit">Ajukan tarik saldo</button>
+        <small style="color:var(--muted);display:block;margin-top:6px">Minimal ${rpk(k.tarik_min)}. Admin akan memeriksa dan mengirim dana ke rekening tujuan.</small>
+      </form>` : `<p style="margin:10px 0 0;color:var(--muted)">Penarikan dapat diajukan setelah saldo mencapai ${rpk(k.tarik_min)}.</p>`}
+    ${me.tarik && me.tarik.length ? `<div class="sec" style="margin-top:14px"><h2 style="font-size:15px">Riwayat penarikan</h2></div>
+      ${me.tarik.map((t) => `<div class="drow"><span class="tx"><b>${rpk(t.nominal)} · ${esc(t.rekening)}</b><small style="color:var(--muted)">${tgl(t.created_at)}${t.catatan ? " · " + esc(t.catatan) : ""}</small></span><span class="tag" style="${TARIK_STATUS[t.status]?.[1] || ""}">${TARIK_STATUS[t.status]?.[0] || t.status}</span></div>`).join("")}` : ""}
+  </div>`;
+}
 function mitraAuth(mode) {
   view(`<section class="hero" style="padding:18px"><small>Program fundraiser</small><h1 style="font-size:20px">Ajak kebaikan, raih pahala yang terus mengalir</h1>
       <p style="margin:0">Dapatkan tautan ajakan pribadi. Setiap donasi lewat tautan Anda tercatat dan Anda menerima kabar via WhatsApp.</p></section>

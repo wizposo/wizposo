@@ -91,7 +91,7 @@ let ME = null, CAMPS = [], PUB = {}, FM = null, ROLES = {}, poll = null, lastSeq
 // [id, judul, ikon, hak akses]
 const ALL_PAGES = [["dashboard", "Ringkasan", "dash", "lihat"], ["tugas", "Tugas jemput", "route", "lapangan"], ["peta", "Peta sebaran", "map", "peta"], ["slip", "Slip & setoran", "receipt", "slip"],
   ["amplop", "Amplop Ramadhan", "mail", "amplop"], ["donasi", "Donasi", "heart", "lihat"], ["program", "Program", "grid", "lihat"], ["berita", "Dokumentasi", "news", "dokumentasi"],
-  ["donatur", "Donatur", "users", "lihat"], ["fundraiser", "Relawan afiliator", "trophy", "lihat"], ["penyimpanan", "Penyimpanan", "cloud", "penyimpanan"], ["pengaturan", "Pengaturan", "gear", "pengaturan"], ["akun", "Akun saya", "user", null]];
+  ["donatur", "Donatur", "users", "lihat"], ["fundraiser", "Relawan afiliator", "trophy", "lihat"], ["upah", "Upah & penarikan", "cash", "keuangan"], ["penyimpanan", "Penyimpanan", "cloud", "penyimpanan"], ["pengaturan", "Pengaturan", "gear", "pengaturan"], ["akun", "Akun saya", "user", null]];
 let PAGES = [];
 const can = (p) => !!ME && (ME.role === "admin" || (ME.perms || []).includes(p));
 const MOBILE = { zisko: ["tugas", "peta", "slip", "akun"], amplop: ["amplop", "peta", "slip", "akun"] };
@@ -407,14 +407,51 @@ VIEWS.fundraiser = async () => {
       <a class="btn green sm" target="_blank" rel="noopener" href="${waLink("", `Assalamu'alaikum, yuk jadi fundraiser WIZ Cabang ${PUB.cabang}. Daftar di sini, dapatkan tautan ajakan pribadi, dan pantau kebaikan yang Anda ajak:\n${link}`)}">${ic("wa")} Ajak jadi fundraiser</a></div></div>
     <div class="kpis"><div class="kpi"><small>Fundraiser aktif</small><b>${rows.filter((r) => r.status === "aktif").length}</b></div><div class="kpi"><small>Total dihimpun lewat fundraiser</small><b>${rpk(rows.reduce((a, b) => a + b.total, 0))}</b></div>
       <div class="kpi"><small>Donatur yang diajak</small><b>${rows.reduce((a, b) => a + b.donatur, 0)}</b></div></div>
-    <div class="tw"><table class="t"><thead><tr><th>#</th><th>Fundraiser</th><th>Kode</th><th>Kota</th><th class="num">Donasi</th><th class="num">Total</th><th>Status</th><th></th></tr></thead><tbody>
+    <div class="tw"><table class="t"><thead><tr><th>#</th><th>Fundraiser</th><th>Kode</th><th>Kota</th><th class="num">Donasi</th><th class="num">Total</th><th class="num">Komisi</th><th>Status</th><th></th></tr></thead><tbody>
     ${rows.map((f, i) => `<tr><td>${i + 1}</td><td><b>${esc(f.nama)}</b><small><a href="${waLink(f.wa)}" target="_blank" rel="noopener">+${esc(f.wa)}</a> · sejak ${tglD(f.created_at)}</small></td><td class="mono">${esc(f.kode)}</td><td>${esc(f.kota || "-")}</td>
-      <td class="num">${f.n}</td><td class="num">${rp(f.total)}</td><td><span class="tag ${f.status === "aktif" ? "st-paid" : "st-pending"}">${f.status}</span></td>
-      <td style="white-space:nowrap"><button class="btn ghost xs" data-t="${f.id}" data-s="${f.status === "aktif" ? "nonaktif" : "aktif"}">${f.status === "aktif" ? "Nonaktifkan" : "Aktifkan"}</button> <button class="btn ghost xs" data-pin="${f.id}">Atur PIN</button></td></tr>`).join("")
-    || `<tr><td colspan="8" class="hint" style="text-align:center;padding:30px">Belum ada fundraiser. Bagikan tautan pendaftaran ke relawan, pengurus, dan jamaah.</td></tr>`}</tbody></table></div>`);
+      <td class="num">${f.n}</td><td class="num">${rp(f.total)}</td><td class="num">${f.komisi_persen != null ? f.komisi_persen + "%" : "<small>umum</small>"}</td><td><span class="tag ${f.status === "aktif" ? "st-paid" : "st-pending"}">${f.status}</span></td>
+      <td style="white-space:nowrap"><button class="btn ghost xs" data-t="${f.id}" data-s="${f.status === "aktif" ? "nonaktif" : "aktif"}">${f.status === "aktif" ? "Nonaktifkan" : "Aktifkan"}</button> <button class="btn ghost xs" data-pin="${f.id}">Atur PIN</button> <button class="btn ghost xs" data-kom="${f.id}" data-persen="${f.komisi_persen ?? ""}">Komisi</button></td></tr>`).join("")
+    || `<tr><td colspan="9" class="hint" style="text-align:center;padding:30px">Belum ada fundraiser. Bagikan tautan pendaftaran ke relawan, pengurus, dan jamaah.</td></tr>`}</tbody></table></div>`);
   $$("[data-t]").forEach((b) => b.onclick = async () => { await api("admin/fundraisers/" + b.dataset.t, { method: "PUT", body: { status: b.dataset.s } }); toast("Status diperbarui"); VIEWS.fundraiser(); });
+  $$("[data-kom]").forEach((b) => b.onclick = () => { modal("Komisi afiliator", field("n_kom", "Persen komisi khusus (%)", b.dataset.persen, { hint: "Kosongkan untuk memakai persen umum dari Pengaturan. Berlaku untuk donasi berikutnya, donasi lama tidak berubah." }), `<button class="btn primary sm" id="kom_s">Simpan</button>`);
+    $("#kom_s").onclick = (e) => busy(e.target, async () => { const raw = val("n_kom"); await api("admin/fundraisers/" + b.dataset.kom, { method: "PUT", body: { komisi_persen: raw === "" ? null : Number(raw.replace(",", ".")) } }); closeModal(); toast("Komisi disimpan"); VIEWS.fundraiser(); }); });
   $$("[data-pin]").forEach((b) => b.onclick = () => { modal("Atur ulang PIN", field("n_pin", "PIN baru (6 angka)", "", { num: true }), `<button class="btn primary sm" id="pin_s">Simpan PIN</button>`);
     $("#pin_s").onclick = (e) => busy(e.target, async () => { await api("admin/fundraisers/" + b.dataset.pin, { method: "PUT", body: { pin: val("n_pin") } }); closeModal(); toast("PIN diperbarui. Beri tahu fundraiser lewat WhatsApp."); }); });
+};
+
+/* ---------- Upah & penarikan ---------- */
+let UPAH_TAB = "diajukan";
+const TARIK_TAG = { diajukan: ["Menunggu", "st-pending"], disetujui: ["Dibayar", "st-paid"], ditolak: ["Ditolak", "st-failed"] };
+VIEWS.upah = async () => {
+  const [d, tarik] = await Promise.all([api("admin/upah"), api("admin/penarikan?status=" + UPAH_TAB)]);
+  const saldoAf = d.afiliator.reduce((a, b) => a + b.tersedia, 0), saldoPet = d.petugas.reduce((a, b) => a + b.tersedia, 0);
+  const menunggu = d.afiliator.reduce((a, b) => a + b.diajukan, 0) + d.petugas.reduce((a, b) => a + b.diajukan, 0);
+  const upah = d.petugas.reduce((a, b) => a + b.upah, 0);
+  const TABS = [["diajukan", "Menunggu"], ["disetujui", "Sudah dibayar"], ["ditolak", "Ditolak"], ["semua", "Semua"]];
+  main(`<div class="ph"><h1>Upah & penarikan</h1></div>
+    <div class="kpis"><div class="kpi"><small>Saldo afiliator tersedia</small><b>${rp(saldoAf)}</b></div><div class="kpi"><small>Saldo upah petugas tersedia</small><b>${rp(saldoPet)}</b></div>
+      <div class="kpi"><small>Penarikan menunggu persetujuan</small><b>${rp(menunggu)}</b></div><div class="kpi"><small>Total upah petugas (semua waktu)</small><b>${rp(upah)}</b></div></div>
+    <div class="panel" style="margin-top:16px"><h2>Permintaan tarik saldo</h2>
+      <div class="acts" style="margin-bottom:12px">${TABS.map(([k, l]) => `<button class="btn ${UPAH_TAB === k ? "primary" : "ghost"} xs" data-tab="${k}">${l}</button>`).join("")}</div>
+      <div class="tw"><table class="t"><thead><tr><th>Tanggal</th><th>Penerima</th><th class="num">Nominal</th><th>Rekening tujuan</th><th>Status</th><th></th></tr></thead><tbody>
+      ${tarik.map((t) => `<tr><td>${tglD(t.created_at)}</td><td><b>${esc(t.nama)}</b><small class="mono">${t.tipe === "petugas" ? esc(ROLES[t.kode] || t.kode) : esc(t.kode)} · +${esc(t.wa)}</small></td><td class="num">${rp(t.nominal)}</td><td>${esc(t.rekening)}${t.catatan ? `<small>${esc(t.catatan)}</small>` : ""}</td>
+        <td><span class="tag ${TARIK_TAG[t.status]?.[1] || ""}">${TARIK_TAG[t.status]?.[0] || t.status}</span>${t.diproses_oleh ? `<small>oleh ${esc(t.diproses_oleh)}</small>` : ""}</td>
+        <td style="white-space:nowrap">${t.status === "diajukan" ? `<button class="btn primary xs" data-ok="${t.id}" data-tipe="${t.tipe}">Setujui</button> <button class="btn ghost xs" data-no="${t.id}" data-tipe="${t.tipe}">Tolak</button>` : ""}</td></tr>`).join("")
+        || `<tr><td colspan="6" class="hint" style="text-align:center;padding:24px">Tidak ada permintaan di daftar ini.</td></tr>`}</tbody></table></div>
+      <p class="hint">Minimal penarikan ${rp(d.tarik_min)}. Setelah disetujui, catat sudah ditransfer agar saldo tercatat benar.</p></div>
+    <div class="panel" style="margin-top:16px"><h2>Saldo afiliator</h2><div class="tw"><table class="t"><thead><tr><th>Afiliator</th><th class="num">Komisi</th><th class="num">Donasi lunas</th><th class="num">Diperoleh</th><th class="num">Dibayar</th><th class="num">Menunggu</th><th class="num">Tersedia</th></tr></thead><tbody>
+      ${d.afiliator.map((f) => `<tr><td><b>${esc(f.nama)}</b><small class="mono">${esc(f.kode)}</small></td><td class="num">${f.persen}%</td><td class="num">${f.donasi}</td><td class="num">${rp(f.diperoleh)}</td><td class="num">${rp(f.dibayar)}</td><td class="num">${rp(f.diajukan)}</td><td class="num"><b>${rp(f.tersedia)}</b></td></tr>`).join("")
+        || `<tr><td colspan="7" class="hint" style="text-align:center;padding:24px">Belum ada afiliator.</td></tr>`}</tbody></table></div>
+      <p class="hint">Komisi hanya dihitung dari donasi infak dan sedekah, tidak dari zakat.</p></div>
+    <div class="panel" style="margin-top:16px"><h2>Setoran & upah petugas</h2><div class="tw"><table class="t"><thead><tr><th>Petugas</th><th>Peran</th><th class="num">Persen</th><th class="num">Slip</th><th class="num">Total setoran</th><th class="num">Upah</th><th class="num">Dibayar</th><th class="num">Tersedia</th></tr></thead><tbody>
+      ${d.petugas.map((p) => `<tr><td><b>${esc(p.nama)}</b></td><td>${esc(ROLES[p.role] || p.role)}</td><td class="num">${p.persen}%</td><td class="num">${p.slip}</td><td class="num">${rp(p.setoran)}</td><td class="num">${rp(p.upah)}</td><td class="num">${rp(p.dibayar)}</td><td class="num"><b>${rp(p.tersedia)}</b></td></tr>`).join("")
+        || `<tr><td colspan="8" class="hint" style="text-align:center;padding:24px">Belum ada petugas lapangan.</td></tr>`}</tbody></table></div>
+      <p class="hint">Upah petugas dihitung dari program infak dan sedekah saja. Slip yang dibatalkan tidak ikut dihitung.</p></div>`);
+  $$("[data-tab]").forEach((b) => b.onclick = () => { UPAH_TAB = b.dataset.tab; VIEWS.upah(); });
+  $$("[data-ok]").forEach((b) => b.onclick = () => { modal("Setujui penarikan", `<p>Pastikan dana sudah ditransfer ke rekening tujuan, lalu catat persetujuan ini. Penerima akan menerima kabar lewat WhatsApp.</p>${field("n_cat", "Catatan (opsional)", "", { ph: "Contoh: transfer BSI tanggal 3 Nov" })}`, `<button class="btn primary sm" id="ok_s">Setujui & catat</button>`);
+    $("#ok_s").onclick = (e) => busy(e.target, async () => { await api(`admin/penarikan/${b.dataset.tipe}/${b.dataset.ok}/setuju`, { method: "POST", body: { catatan: val("n_cat") } }); closeModal(); toast("Penarikan disetujui dan dicatat"); VIEWS.upah(); }); });
+  $$("[data-no]").forEach((b) => b.onclick = () => { modal("Tolak penarikan", `<p>Saldo akan kembali tersedia. Jelaskan alasannya agar penerima bisa memperbaiki pengajuan.</p>${field("n_alasan", "Alasan penolakan", "", { ph: "Contoh: nomor rekening tidak jelas" })}`, `<button class="btn danger sm" id="no_s">Tolak</button>`);
+    $("#no_s").onclick = (e) => busy(e.target, async () => { await api(`admin/penarikan/${b.dataset.tipe}/${b.dataset.no}/tolak`, { method: "POST", body: { alasan: val("n_alasan") } }); closeModal(); toast("Penarikan ditolak"); VIEWS.upah(); }); });
 };
 
 /* ---------- Pundi & kotak ---------- */
@@ -506,7 +543,10 @@ VIEWS.pengaturan = async () => {
         <div style="display:flex;gap:8px;margin-top:12px"><div class="inp" style="flex:1"><span>+62</span><input id="t_wa" inputmode="numeric" placeholder="Nomor uji"></div><button class="btn ghost sm" id="t_go">Kirim tes</button></div></div>
       <div class="panel" style="margin-top:16px"><h2>Fundraiser</h2>
         <label class="chk"><input type="checkbox" id="s_fa" ${s.fr_auto_aktif ? "checked" : ""}> Fundraiser baru langsung aktif</label>
-        ${field("s_fap", "Pesan apresiasi di portal fundraiser", s.fr_apresiasi, { area: true, ph: "Contoh: Fundraiser terbaik tiap bulan mendapat paket buku dan doa bersama." , hint: "Hindari menjanjikan komisi dari dana zakat." })}</div>
+        ${field("s_fap", "Pesan apresiasi di portal fundraiser", s.fr_apresiasi, { area: true, ph: "Contoh: Fundraiser terbaik tiap bulan mendapat paket buku dan doa bersama." , hint: "Komisi dan upah hanya dari infak dan sedekah, tidak dari zakat." })}</div>
+      <div class="panel" style="margin-top:16px"><h2>Upah & komisi</h2><p class="hint" style="margin-top:0">Komisi afiliator dihitung dari donasi infak dan sedekah yang lunas. Upah petugas dihitung dari rincian infak dan sedekah pada slip. Dana zakat tidak pernah menghasilkan komisi atau upah. Tiap transaksi menyimpan persen yang berlaku saat dicatat.</p>
+        <div class="fg">${field("s_upa", "Komisi afiliator (%)", s.upah_afiliator_persen ?? 0, { hint: "Dibayar dari donasi yang masuk lewat tautan afiliator." })}${field("s_upz", "Upah petugas ZISKO (%)", s.upah_zisko_persen ?? 0, { hint: "Dihitung dari setiap slip setoran yang dicatat." })}
+        ${field("s_tmin", "Penarikan minimal", s.tarik_min ?? 50000, { pre: "Rp", num: true })}</div></div>
       <div class="panel" style="margin-top:16px"><h2>Pengguna & peran</h2><p class="hint" style="margin-top:0">Pengurus masuk dengan email, petugas lapangan cukup dengan nomor WhatsApp. Relawan afiliator mendaftar sendiri di portal relawan.</p>
         <div class="list">${admins.map((a) => `<a class="it" href="#" data-ea="${a.id}"><span class="tx"><b>${esc(a.nama)}</b>${a.aktif ? "" : ' <span class="tag st-failed">nonaktif</span>'}<small>${esc(ROLES[a.role] || a.role)} · ${esc([a.email, a.wa ? "+" + a.wa : ""].filter(Boolean).join(" · "))}${a.wilayah ? " · " + esc(a.wilayah) : ""}</small></span>${ic("ext", 16)}</a>`).join("")}</div>
         <button class="btn ghost sm" style="margin-top:8px" id="add_a">${ic("plus")} Tambah pengguna</button> <button class="btn ghost sm" style="margin-top:8px" onclick="location.hash='#akun'">Akun saya</button></div>
@@ -522,7 +562,7 @@ VIEWS.pengaturan = async () => {
         harga_emas: num(val("s_emas")), nisab_gram: num(val("s_nisab")), harga_beras: num(val("s_beras")), beras_per_jiwa: parseFloat(val("s_kg").replace(",", ".")) || 2.5,
         pundi_jadwal: val("s_pj"), pundi_wilayah: val("s_pw"), kantor_alamat: val("s_ktr"), call_center: val("s_cc"), kode_cabang: val("s_kode").toUpperCase(),
         kab_default: val("s_kab"), provinsi_default: val("s_prov"), jemput_tanggal: Math.min(28, Math.max(1, num(val("s_jt")) || 10)), amplop_periode: val("s_ap"), midtrans_production: $("#s_mtp").checked, notif_donatur: $("#s_nd").checked, notif_admin: $("#s_na").checked,
-        notif_fundraiser: $("#s_nf").checked, fr_auto_aktif: $("#s_fa").checked, fr_apresiasi: val("s_fap") };
+        notif_fundraiser: $("#s_nf").checked, fr_auto_aktif: $("#s_fa").checked, fr_apresiasi: val("s_fap"), upah_afiliator_persen: Math.min(100, Number(val("s_upa").replace(",", ".")) || 0), upah_zisko_persen: Math.min(100, Number(val("s_upz").replace(",", ".")) || 0), tarik_min: num(val("s_tmin")) };
       if ($("#s_mt")) body.midtrans_server_key = val("s_mt"); if ($("#s_fn")) body.fonnte_token = val("s_fn");
       await api("admin/settings", { method: "PUT", body }); PUB = await api("public/config"); toast("Pengaturan disimpan"); VIEWS.pengaturan();
     } catch (x) { toast(x.message); } finally { b.disabled = false; }
@@ -711,11 +751,12 @@ function userForm(a) {
       ${field("na_wa", "Nomor WhatsApp", a.wa ? String(a.wa).replace(/^62/, "") : "", { pre: "+62", num: true, hint: "Bisa dipakai untuk masuk. Juga menerima bukti setoran diterima." })}${field("na_email", "Email (opsional untuk petugas)", a.email || "", { type: "email" })}
       ${field("na_wil", "Wilayah tugas (opsional)", a.wilayah || "", { ph: "Contoh: Poso Kota, Lage" })}
       ${field("na_pass", a.id ? "Kata sandi baru (kosongkan bila tetap)" : "Kata sandi awal", "", { type: "password", hint: "Pengurus minimal 8 karakter, petugas lapangan minimal 6." })}
+      ${field("na_upah", "Persen upah khusus (%) — opsional", a.upah_persen ?? "", { hint: "Untuk ZISKO dan relawan Amplop. Kosongkan untuk memakai persen umum dari Pengaturan." })}
       ${a.id && a.id !== ME.id ? `<div class="full"><label class="chk"><input type="checkbox" id="na_akt" ${a.aktif ? "checked" : ""}> Akun aktif (bisa masuk)</label></div>` : ""}</div>`,
     `${a.id && a.id !== ME.id ? `<button class="btn danger sm" id="na_del" style="margin-right:auto">Hapus</button>` : ""}<button class="btn primary sm" id="na_s">${a.id ? "Simpan" : "Tambah"}</button>`);
   const info = () => { $("#na_info").textContent = ROLE_INFO[val("na_role")] || ""; }; $("#na_role").onchange = info; info();
   $("#na_s").onclick = (e) => busy(e.target, async () => {
-    const body = { nama: val("na_nama"), role: val("na_role"), wa: val("na_wa"), email: val("na_email"), wilayah: val("na_wil"), password: $("#na_pass").value, aktif: $("#na_akt") ? $("#na_akt").checked : true };
+    const body = { nama: val("na_nama"), role: val("na_role"), wa: val("na_wa"), email: val("na_email"), wilayah: val("na_wil"), password: $("#na_pass").value, aktif: $("#na_akt") ? $("#na_akt").checked : true, upah_persen: val("na_upah") === "" ? null : Number(val("na_upah").replace(",", ".")) };
     if (!a.id && lap(body.role) && !body.wa) throw new Error("Petugas lapangan wajib punya nomor WhatsApp untuk masuk.");
     await api(a.id ? "admin/admins/" + a.id : "admin/admins", { method: a.id ? "PUT" : "POST", body }); closeModal(); toast("Pengguna disimpan");
     if (!a.id && body.wa) setTimeout(() => modal("Kirim info masuk", `<p>Bagikan cara masuk ke ${esc(body.nama)}:</p><div class="copyrow"><span class="mono">${esc(location.origin)}/admin</span></div>`,
