@@ -91,7 +91,7 @@ let ME = null, CAMPS = [], PUB = {}, FM = null, ROLES = {}, poll = null, lastSeq
 // [id, judul, ikon, hak akses]
 const ALL_PAGES = [["dashboard", "Ringkasan", "dash", "lihat"], ["tugas", "Tugas jemput", "route", "lapangan"], ["peta", "Peta sebaran", "map", "peta"], ["slip", "Slip & setoran", "receipt", "slip"],
   ["amplop", "Amplop Ramadhan", "mail", "amplop"], ["donasi", "Donasi", "heart", "lihat"], ["program", "Program", "grid", "lihat"], ["berita", "Dokumentasi", "news", "dokumentasi"],
-  ["donatur", "Donatur", "users", "lihat"], ["fundraiser", "Relawan afiliator", "trophy", "lihat"], ["upah", "Upah & penarikan", "cash", "keuangan"], ["penyimpanan", "Penyimpanan", "cloud", "penyimpanan"], ["pengaturan", "Pengaturan", "gear", "pengaturan"], ["akun", "Akun saya", "user", null]];
+  ["donatur", "Donatur", "users", "lihat"], ["fundraiser", "Relawan afiliator", "trophy", "lihat"], ["pesanwa", "Pesan WA", "wa", "crm"], ["upah", "Upah & penarikan", "cash", "keuangan"], ["penyimpanan", "Penyimpanan", "cloud", "penyimpanan"], ["pengaturan", "Pengaturan", "gear", "pengaturan"], ["akun", "Akun saya", "user", null]];
 let PAGES = [];
 const can = (p) => !!ME && (ME.role === "admin" || (ME.perms || []).includes(p));
 const MOBILE = { zisko: ["tugas", "peta", "slip", "akun"], amplop: ["amplop", "peta", "slip", "akun"] };
@@ -275,10 +275,14 @@ function donDetail(d, after) {
     ${d.bukti_id ? `<div class="sect">Bukti transfer</div><a href="/api/admin/media/${d.bukti_id}" target="_blank" rel="noopener"><img src="/api/admin/media/${d.bukti_id}" alt="Bukti transfer" style="max-height:340px;border-radius:12px;border:1px solid var(--line)"></a>` : ""}`,
     !can("keuangan") ? "" : `${d.status === "paid" && d.wa && !d.slip_no ? `<button class="btn ghost sm" id="rs">${ic("wa")} Kirim ulang kuitansi</button>` : ""}
      ${d.status === "pending" ? `<button class="btn danger sm" id="cx">Batalkan</button>${d.metode !== "gateway" ? `<button class="btn green sm" id="pd">${ic("check")} Tandai lunas</button>` : ""}` : ""}
-     ${d.status === "cancelled" ? `<button class="btn ghost sm" id="rp">Kembalikan ke menunggu</button>` : ""}`);
+     ${d.status === "cancelled" ? `<button class="btn ghost sm" id="rp">Kembalikan ke menunggu</button>` : ""}
+     ${["pending", "cancelled", "failed", "expired"].includes(d.status) ? `<button class="btn ghost sm" id="hp" style="color:var(--danger)">Hapus</button>` : ""}`);
   $("#pd")?.addEventListener("click", () => setStatus(d.id, "paid", after));
   $("#cx")?.addEventListener("click", () => setStatus(d.id, "cancelled", after));
   $("#rp")?.addEventListener("click", () => setStatus(d.id, "pending", after));
+  $("#hp")?.addEventListener("click", () => {
+    modal("Hapus transaksi", `<p>Transaksi <b>${esc(d.id)}</b> (${rp(d.total)}) akan dihapus permanen dan tidak bisa dikembalikan. Gunakan Batalkan jika ingin riwayatnya tetap tercatat.</p>`, `<button class="btn danger sm" id="hp_ok">Ya, hapus permanen</button>`);
+    $("#hp_ok").onclick = (e) => busy(e.target, async () => { await api(`admin/donations/${d.id}`, { method: "DELETE" }); closeModal(); toast("Transaksi dihapus"); after && after(); }); });
   $("#rs")?.addEventListener("click", async () => { try { await api(`admin/donations/${d.id}/resend`, { method: "POST" }); toast("Kuitansi terkirim"); } catch (e) { mErr(e.message); } });
 }
 async function offlineForm(pre = {}) {
@@ -417,6 +421,84 @@ VIEWS.fundraiser = async () => {
     $("#kom_s").onclick = (e) => busy(e.target, async () => { const raw = val("n_kom"); await api("admin/fundraisers/" + b.dataset.kom, { method: "PUT", body: { komisi_persen: raw === "" ? null : Number(raw.replace(",", ".")) } }); closeModal(); toast("Komisi disimpan"); VIEWS.fundraiser(); }); });
   $$("[data-pin]").forEach((b) => b.onclick = () => { modal("Atur ulang PIN", field("n_pin", "PIN baru (6 angka)", "", { num: true }), `<button class="btn primary sm" id="pin_s">Simpan PIN</button>`);
     $("#pin_s").onclick = (e) => busy(e.target, async () => { await api("admin/fundraisers/" + b.dataset.pin, { method: "PUT", body: { pin: val("n_pin") } }); closeModal(); toast("PIN diperbarui. Beri tahu fundraiser lewat WhatsApp."); }); });
+};
+
+/* ---------- Pesan WA: jadwal & blast ---------- */
+const WA_HARI = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Ahad"];
+const WA_BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+const WA_AUDIENS = { semua: "Semua donatur", sedekah: "Donatur yang pernah sedekah", pundi: "Donatur Pundi Sedekah" };
+const WA_MODE = { sekali: "Sekali (tanggal tertentu)", mingguan: "Mingguan", bulanan: "Bulanan", sekarang: "Kirim sekarang" };
+const waJadwalText = (j) => j.mode === "sekali" ? `${tglD(j.tanggal_mulai)} · ${j.jam}`
+  : j.mode === "mingguan" ? `Tiap ${j.hari.split(",").map((n) => WA_HARI[n - 1]).join(", ")} · ${j.jam}`
+  : `${j.bulan.split(",").map((n) => WA_BULAN[n - 1]).join(", ")} · ${j.pekan ? "pekan " + j.pekan.split(",").join(", ") : "tanggal " + j.tanggal} · ${j.jam}`;
+const waChk = (name, items) => `<div style="display:flex;flex-wrap:wrap;gap:6px 12px">${items.map(([v, l]) => `<label style="display:flex;gap:4px;align-items:center;font-size:14px"><input type="checkbox" name="${name}" value="${v}"> ${l}</label>`).join("")}</div>`;
+const waBox = (mode) => {
+  const jam = field("wa_jam", "Jam kirim", "07:00", { type: "time" });
+  if (mode === "sekali") return field("wa_tgl", "Tanggal", "", { type: "date" }) + jam;
+  if (mode === "mingguan") return `<div class="full"><label class="f">Hari</label>${waChk("wa_hari", WA_HARI.map((h, i) => [i + 1, h]))}</div>` + jam;
+  if (mode === "bulanan") return `<div class="full"><label class="f">Pekan</label>${waChk("wa_pekan", [[1, "Pekan 1"], [2, "Pekan 2"], [3, "Pekan 3"], [4, "Pekan 4"]])}</div>`
+    + field("wa_tanggal", "Atau tanggal (pisahkan koma)", "", { ph: "Contoh: 1, 15" })
+    + `<div class="full"><label class="f">Bulan</label>${waChk("wa_bulan", WA_BULAN.map((b, i) => [i + 1, b.slice(0, 3)]))}</div>` + jam;
+  return `<p class="hint full" style="margin:0">Pesan langsung masuk antrean dan dikirim bertahap. Mode ini memakai baris pertama dari isi pesan.</p>`;
+};
+
+VIEWS.pesanwa = async () => {
+  const qs = new URLSearchParams(location.hash.split("?")[1] || "");
+  const konfirm = (qs.get("berhenti") || "").replace(/\D/g, "");
+  const [d, berhenti] = await Promise.all([api("admin/wa/jadwal"), api("admin/wa/berhenti")]);
+  const tag = (s) => (s === "dikonfirmasi" ? `<span class="tag st-paid">Berhenti</span>` : `<span class="tag st-pending">Menunggu konfirmasi</span>`);
+  main(`<div class="ph"><h1>Pesan WA</h1></div>
+    ${konfirm ? `<div class="panel" style="margin-bottom:16px;border:2px solid #f59e0b"><h2>Konfirmasi berhenti</h2>
+      <p>Nomor <b class="mono">+${esc(konfirm)}</b> meminta berhenti. Nomor ini sudah tidak menerima pesan. Tekan tombol untuk mencatatnya.</p>
+      <button class="btn primary sm" id="wa_kf">Konfirmasi berhenti</button></div>` : ""}
+    ${!d.token_ok ? `<div class="alert"><span>Token Fonnte belum diatur. Isi di Pengaturan → Notifikasi WhatsApp agar pesan bisa dikirim.</span></div>` : ""}
+    <div class="panel"><h2>Buat pesan</h2>
+      <div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+        ${field("wa_judul", "Judul", "", { ph: "Contoh: Hadits Jumat pagi", full: true })}
+        ${field("wa_jenis", "Jenis isi", "teks", { sel: [["teks", "Teks bebas"], ["hadits", "Hadits"], ["ayat", "Ayat"]] })}
+        ${field("wa_audiens", "Penerima", "semua", { sel: Object.entries(WA_AUDIENS) })}
+        ${field("wa_mode", "Jadwal", "sekali", { sel: Object.entries(WA_MODE) })}
+        <div id="wa_box" class="full" style="display:contents">${waBox("sekali")}</div>
+        ${field("wa_isi", "Isi pesan (satu baris = satu pesan, berputar dari baris pertama setelah baris terakhir)", "", { area: true, rows: 6, full: true, ph: "Tulis pesan. Gunakan {nama} untuk nama donatur." })}
+      </div>
+      <p class="hint">Hadits dan ayat wajib dari sumber shahih. Setiap pesan otomatis menyertakan ajakan balas BERHENTI.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button class="btn ghost sm" id="wa_cek">Cek jumlah penerima</button>
+        <button class="btn primary sm" id="wa_simpan">Simpan jadwal</button>
+      </div></div>
+    <div class="panel" style="margin-top:16px"><h2>Jadwal</h2>
+      <p class="hint" style="margin-top:0">Menunggu di antrean: <b>${d.menunggu_total}</b>. Pengiriman berjalan otomatis tiap 15 menit, sekitar 25 pesan per proses.</p>
+      <div class="tw"><table class="t"><thead><tr><th>Judul</th><th>Penerima</th><th>Jadwal</th><th class="num">Isi</th><th class="num">Terkirim</th><th class="num">Gagal</th><th class="num">Antre</th><th></th></tr></thead><tbody>
+      ${d.jadwal.map((j) => `<tr><td><b>${esc(j.judul)}</b><small>${esc(WA_MODE[j.mode] || j.mode)} · ${esc(j.jenis)}</small></td><td>${esc(WA_AUDIENS[j.audiens] || j.audiens)}</td><td>${esc(waJadwalText(j))}</td>
+        <td class="num">${j.baris} baris</td><td class="num">${j.terkirim}</td><td class="num">${j.gagal}</td><td class="num">${j.menunggu}</td>
+        <td style="white-space:nowrap"><button class="btn ghost xs" data-aktif="${j.id}" data-on="${j.aktif ? 0 : 1}">${j.aktif ? "Nonaktifkan" : "Aktifkan"}</button> <button class="btn ghost xs" data-hapus="${j.id}" style="color:var(--danger)">Hapus</button></td></tr>`).join("")
+        || `<tr><td colspan="8" class="hint" style="text-align:center;padding:24px">Belum ada jadwal.</td></tr>`}</tbody></table></div></div>
+    <div class="panel" style="margin-top:16px"><h2>Berhenti menerima pesan</h2>
+      <p class="hint" style="margin-top:0">Donatur yang membalas BERHENTI tidak menerima pesan lagi. Admin menerima pemberitahuan WhatsApp berisi tautan konfirmasi.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">${field("wa_bwa", "Nomor WhatsApp", "", { ph: "08xx" })}${field("wa_bnm", "Nama (opsional)", "", { ph: "Nama" })}<button class="btn ghost sm" id="wa_tambah_b">Tambahkan ke daftar berhenti</button></div>
+      <div class="tw"><table class="t"><thead><tr><th>WhatsApp</th><th>Nama</th><th>Status</th><th>Waktu</th></tr></thead><tbody>
+      ${berhenti.map((b) => `<tr><td class="mono">+${esc(b.wa)}</td><td>${esc(b.nama || "-")}</td><td>${tag(b.status)}</td><td>${tglD(b.created_at)}</td></tr>`).join("")
+        || `<tr><td colspan="4" class="hint" style="text-align:center;padding:24px">Belum ada yang berhenti.</td></tr>`}</tbody></table></div></div>
+    <div class="panel" style="margin-top:16px"><h2>Webhook Fonnte</h2>
+      <p class="hint" style="margin-top:0">Di dashboard Fonnte, isi kolom webhook dengan alamat berikut agar balasan BERHENTI masuk ke aplikasi:</p>
+      <input readonly value="${esc(d.webhook)}" onclick="this.select()" style="width:100%;font-size:13px"></div>`);
+
+  const boxMode = () => { $("#wa_box").innerHTML = waBox(val("wa_mode")); };
+  $("#wa_mode").onchange = boxMode;
+  $("#wa_cek").onclick = async (e) => busy(e.target, async () => { const r = await api("admin/wa/pratinjau", { method: "POST", body: { audiens: val("wa_audiens") } }); toast(`${r.jumlah} penerima`); });
+  $("#wa_simpan").onclick = (e) => busy(e.target, async () => {
+    const mode = val("wa_mode");
+    const body = { judul: val("wa_judul"), jenis: val("wa_jenis"), audiens: val("wa_audiens"), mode, isi: $("#wa_isi").value, jam: val("wa_jam"), tanggal: val("wa_tgl"), tanggal_mulai: val("wa_tgl"),
+      hari: $$("input[name=wa_hari]:checked").map((x) => x.value), pekan: $$("input[name=wa_pekan]:checked").map((x) => x.value), bulan: $$("input[name=wa_bulan]:checked").map((x) => x.value), tanggal_bulanan: val("wa_tanggal") };
+    if (mode === "bulanan") body.tanggal = val("wa_tanggal");
+    const r = await api("admin/wa/jadwal", { method: "POST", body });
+    toast(mode === "sekarang" ? `Pesan masuk antrean untuk ${r.jumlah} penerima` : "Jadwal disimpan"); VIEWS.pesanwa();
+  });
+  $$("[data-aktif]").forEach((b) => b.onclick = async () => { try { await api(`admin/wa/jadwal/${b.dataset.aktif}/aktif`, { method: "POST", body: { aktif: b.dataset.on === "1" } }); VIEWS.pesanwa(); } catch (e) { toast(e.message); } });
+  $$("[data-hapus]").forEach((b) => b.onclick = () => { modal("Hapus jadwal", `<p>Jadwal ini dihapus dan pesan yang masih menunggu di antrean dibatalkan. Riwayat yang sudah terkirim tetap ada.</p>`, `<button class="btn danger sm" id="hap_ok">Ya, hapus</button>`);
+    $("#hap_ok").onclick = (e) => busy(e.target, async () => { await api(`admin/wa/jadwal/${b.dataset.hapus}`, { method: "DELETE" }); closeModal(); toast("Jadwal dihapus"); VIEWS.pesanwa(); }); });
+  $("#wa_kf")?.addEventListener("click", (e) => busy(e.target, async () => { await api(`admin/wa/berhenti/${konfirm}/konfirmasi`, { method: "POST" }); toast("Berhenti dikonfirmasi"); location.hash = "#pesanwa"; VIEWS.pesanwa(); }));
+  $("#wa_tambah_b").onclick = (e) => busy(e.target, async () => { await api("admin/wa/berhenti", { method: "POST", body: { wa: val("wa_bwa"), nama: val("wa_bnm") } }); toast("Ditambahkan ke daftar berhenti"); VIEWS.pesanwa(); });
 };
 
 /* ---------- Upah & penarikan ---------- */
