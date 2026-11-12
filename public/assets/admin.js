@@ -423,83 +423,380 @@ VIEWS.fundraiser = async () => {
     $("#pin_s").onclick = (e) => busy(e.target, async () => { await api("admin/fundraisers/" + b.dataset.pin, { method: "PUT", body: { pin: val("n_pin") } }); closeModal(); toast("PIN diperbarui. Beri tahu fundraiser lewat WhatsApp."); }); });
 };
 
-/* ---------- Pesan WA: jadwal & blast ---------- */
+/* ---------- Pesan WA: kirim, jadwal, kontak, grup ---------- */
 const WA_HARI = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Ahad"];
 const WA_BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-const WA_AUDIENS = { semua: "Semua donatur", sedekah: "Donatur yang pernah sedekah", pundi: "Donatur Pundi Sedekah" };
-const WA_MODE = { sekali: "Sekali (tanggal tertentu)", mingguan: "Mingguan", bulanan: "Bulanan", sekarang: "Kirim sekarang" };
-const waJadwalText = (j) => j.mode === "sekali" ? `${tglD(j.tanggal_mulai)} · ${j.jam}`
-  : j.mode === "mingguan" ? `Tiap ${j.hari.split(",").map((n) => WA_HARI[n - 1]).join(", ")} · ${j.jam}`
-  : `${j.bulan.split(",").map((n) => WA_BULAN[n - 1]).join(", ")} · ${j.pekan ? "pekan " + j.pekan.split(",").join(", ") : "tanggal " + j.tanggal} · ${j.jam}`;
-const waChk = (name, items) => `<div style="display:flex;flex-wrap:wrap;gap:6px 12px">${items.map(([v, l]) => `<label style="display:flex;gap:4px;align-items:center;font-size:14px"><input type="checkbox" name="${name}" value="${v}"> ${l}</label>`).join("")}</div>`;
-const waBox = (mode) => {
-  const jam = field("wa_jam", "Jam kirim", "07:00", { type: "time" });
-  if (mode === "sekali") return field("wa_tgl", "Tanggal", "", { type: "date" }) + jam;
-  if (mode === "mingguan") return `<div class="full"><label class="f">Hari</label>${waChk("wa_hari", WA_HARI.map((h, i) => [i + 1, h]))}</div>` + jam;
-  if (mode === "bulanan") return `<div class="full"><label class="f">Pekan</label>${waChk("wa_pekan", [[1, "Pekan 1"], [2, "Pekan 2"], [3, "Pekan 3"], [4, "Pekan 4"]])}</div>`
-    + field("wa_tanggal", "Atau tanggal (pisahkan koma)", "", { ph: "Contoh: 1, 15" })
-    + `<div class="full"><label class="f">Bulan</label>${waChk("wa_bulan", WA_BULAN.map((b, i) => [i + 1, b.slice(0, 3)]))}</div>` + jam;
-  return `<p class="hint full" style="margin:0">Pesan langsung masuk antrean dan dikirim bertahap. Mode ini memakai baris pertama dari isi pesan.</p>`;
+const WA_AUDIENS = { "": "Tidak", semua: "Semua donatur", sedekah: "Donatur yang pernah sedekah", pundi: "Donatur Pundi Sedekah" };
+const WA_MODE = { sekarang: "Sekarang", sekali: "Nanti", harian: "Harian", mingguan: "Mingguan", bulanan: "Bulanan" };
+const WA_JENIS = [["teks", "Pesan biasa"], ["pengumuman", "Pengumuman"], ["hadits", "Hadits"], ["ayat", "Ayat"]];
+const WA_TABS = [["kirim", "Kirim pesan"], ["jadwal", "Terjadwal"], ["riwayat", "Riwayat"], ["kontak", "Kontak"], ["grup", "Grup"], ["berhenti", "Berhenti"]];
+const WA_SHEET_CONTOH = "https://docs.google.com/spreadsheets/d/…/edit#gid=0";
+let WA_TAB = "kirim", WA_DATA = null;
+// Isian composer disimpan agar tidak hilang saat pindah tab
+const WA_C = { pilih: new Map(), nomor: "", donatur: "", label: [], grup: [], anggota: [], kontak_semua: false, judul: "", jenis: "teks", sumber: "tulis", isi: "", lampiran: "", sheet_url: "", kategori: "", mode: "sekarang" };
+
+const waTry = async (btn, fn) => { const t = btn.innerHTML; btn.disabled = true; btn.textContent = "Memproses…"; try { await fn(); } catch (e) { $("#m_err") && !$("#modalBg").hidden ? mErr(e.message) : toast(e.message); } finally { btn.disabled = false; btn.innerHTML = t; } };
+const waChk = (name, items, checked = []) => `<div class="wa-chks">${items.map(([v, l]) => `<label><input type="checkbox" name="${name}" value="${esc(v)}" ${checked.map(String).includes(String(v)) ? "checked" : ""}> ${l}</label>`).join("")}</div>`;
+const waTanggalIni = () => { const d = new Date(Date.now() + 8 * 3600e3); return d.toISOString().slice(0, 10); };
+const waJadwalText = (j) => j.mode === "sekali" ? `${tglD(j.tanggal_mulai)} · ${j.jam || "-"}`
+  : j.mode === "harian" ? `Tiap hari · ${j.jam}`
+  : j.mode === "mingguan" ? `Tiap ${String(j.hari || "").split(",").map((n) => WA_HARI[n - 1]).join(", ")} · ${j.jam}`
+  : j.mode === "bulanan" ? `${String(j.bulan || "").split(",").map((n) => WA_BULAN[n - 1]?.slice(0, 3)).join(", ")} · ${j.pekan ? "pekan " + j.pekan.split(",").join(", ") : "tgl " + j.tanggal} · ${j.jam}` : j.mode;
+const waTargetText = (t = {}) => {
+  const g = (ids) => ids.map((id) => (WA_DATA?.grup.find((x) => x.id === id)?.nama || id)).join(", ");
+  const s = [];
+  if (t.donatur) s.push(WA_AUDIENS[t.donatur]);
+  if (t.kontak_semua) s.push("Semua kontak");
+  if (t.label?.length) s.push("Label: " + t.label.join(", "));
+  if (t.grup?.length) s.push("Grup: " + g(t.grup));
+  if (t.anggota?.length) s.push("Anggota " + g(t.anggota));
+  if (t.pilih?.length) s.push(`${t.pilih.length} orang dipilih`);
+  if (t.nomor) s.push("Nomor tambahan");
+  return s.join(" · ") || "-";
 };
+// Tampilan gelembung WA: *tebal*, _miring_, ~coret~, {nama}, {a|b}
+const waBubble = (t) => esc(String(t || "").replace(/\{([^{}]*\|[^{}]*)\}/g, (_, s) => s.split("|")[0]).replaceAll("{nama}", "Ahmad"))
+  .replace(/\*([^*\n]+)\*/g, "<b>$1</b>").replace(/_([^_\n]+)_/g, "<i>$1</i>").replace(/~([^~\n]+)~/g, "<s>$1</s>").replace(/\n/g, "<br>");
+
+// ---- Kontak dari file / HP ----
+function waParseVcf(text) {
+  const out = [];
+  for (const card of String(text).split(/BEGIN:VCARD/i).slice(1)) {
+    const lines = card.replace(/\r?\n[ \t]/g, "").split(/\r?\n/);
+    const fn = lines.find((l) => /^FN[;:]/i.test(l))?.split(":").slice(1).join(":").trim()
+      || lines.find((l) => /^N[;:]/i.test(l))?.split(":").slice(1).join(":").split(";").filter(Boolean).reverse().join(" ").trim() || "";
+    for (const l of lines.filter((x) => /^(item\d+\.)?TEL/i.test(x))) out.push({ nama: fn, wa: l.split(":").slice(1).join(":").trim() });
+  }
+  return out;
+}
+function waParseCsv(text) {
+  const rows = []; let row = [], cell = "", q = false; const s = String(text).replace(/^﻿/, "");
+  for (let i = 0; i < s.length; i++) { const c = s[i];
+    if (q) { if (c === '"') { if (s[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c; }
+    else if (c === '"') q = true; else if (c === "," || c === ";") { row.push(cell); cell = ""; }
+    else if (c === "\n" || c === "\r") { if (c === "\r" && s[i + 1] === "\n") i++; row.push(cell); rows.push(row); row = []; cell = ""; } else cell += c; }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  if (!rows.length) return [];
+  const head = rows[0].map((h) => h.trim().toLowerCase());
+  const telCol = head.map((h, i) => (/phone|telp|telepon|hp|whatsapp|^wa$|nomor/.test(h) && !/type|label|jenis/.test(h) ? i : -1)).filter((i) => i >= 0);
+  const nameCol = head.findIndex((h) => /^(name|nama|display name|nama lengkap|full name)$/.test(h));
+  const first = head.indexOf("first name"), last = head.indexOf("last name");
+  const body = telCol.length ? rows.slice(1) : rows;
+  const out = [];
+  for (const r of body) {
+    const nama = nameCol >= 0 ? r[nameCol] : first >= 0 ? `${r[first] || ""} ${r[last] || ""}` : r.find((x) => /[a-z]/i.test(x) && !/\d{6,}/.test(x)) || "";
+    const cells = telCol.length ? telCol.map((i) => r[i] || "") : r.filter((x) => /\d[\d\s+().-]{7,}/.test(x));
+    for (const c of cells) for (const n of String(c).split(/:::|\//)) if (/\d{6,}/.test(n.replace(/\D/g, ""))) out.push({ nama: String(nama).trim(), wa: n.trim() });
+  }
+  return out;
+}
+const waBisaKontakHP = () => "contacts" in navigator && "select" in (navigator.contacts || {});
+async function waAmbilKontakHP() {
+  const sel = await navigator.contacts.select(["name", "tel"], { multiple: true });
+  const out = [];
+  for (const c of sel) for (const t of c.tel || []) out.push({ nama: (c.name || [])[0] || "", wa: t });
+  return out;
+}
+const waItemsKeTeks = (items) => items.map((x) => `${x.nama ? x.nama + " - " : ""}${x.wa}`).join("\n");
 
 VIEWS.pesanwa = async () => {
   const qs = new URLSearchParams(location.hash.split("?")[1] || "");
-  const konfirm = (qs.get("berhenti") || "").replace(/\D/g, "");
-  const [d, berhenti] = await Promise.all([api("admin/wa/jadwal"), api("admin/wa/berhenti")]);
-  const tag = (s) => (s === "dikonfirmasi" ? `<span class="tag st-paid">Berhenti</span>` : `<span class="tag st-pending">Menunggu konfirmasi</span>`);
+  if (qs.get("berhenti")) WA_TAB = "berhenti";
+  if (qs.get("tab")) WA_TAB = qs.get("tab");
+  const [d, data] = await Promise.all([api("admin/wa/jadwal"), api("admin/wa/data")]);
+  WA_DATA = data;
   main(`<div class="ph"><h1>Pesan WA</h1></div>
-    ${konfirm ? `<div class="panel" style="margin-bottom:16px;border:2px solid #f59e0b"><h2>Konfirmasi berhenti</h2>
+    ${!d.token_ok ? `<div class="alert"><span>Token Fonnte belum diatur. Isi di Pengaturan → Notifikasi WhatsApp agar pesan bisa dikirim.</span></div>` : ""}
+    <div class="wa-tabs">${WA_TABS.map(([k, l]) => `<button class="${WA_TAB === k ? "on" : ""}" data-watab="${k}">${l}${k === "riwayat" && d.menunggu_total ? ` <span class="wa-badge">${d.menunggu_total}</span>` : ""}</button>`).join("")}</div>
+    <div id="wa_body"></div>`);
+  $(".wa-tabs .on")?.scrollIntoView({ inline: "center", block: "nearest" });
+  $$("[data-watab]").forEach((b) => b.onclick = () => { WA_TAB = b.dataset.watab; if (location.hash !== "#pesanwa") history.replaceState(null, "", "#pesanwa"); VIEWS.pesanwa(); });
+  const view = { kirim: waKirim, jadwal: waJadwal, riwayat: waRiwayat, kontak: waKontak, grup: waGrup, berhenti: waBerhenti }[WA_TAB] || waKirim;
+  await view(d, qs);
+};
+
+// ================= Tab: Kirim pesan =================
+function waTarget() {
+  return { donatur: WA_C.donatur || undefined, kontak_semua: WA_C.kontak_semua || undefined, label: WA_C.label, grup: WA_C.grup, anggota: WA_C.anggota, pilih: [...WA_C.pilih.keys()], nomor: WA_C.nomor };
+}
+function waBoxWaktu() {
+  const jam = field("wa_jam", "Jam (WITA)", WA_C.jam || "07:00", { type: "time" });
+  const m = WA_C.mode;
+  if (m === "sekarang") return `<p class="hint" style="margin:0">Pesan langsung dikirim. Fonnte memberi jeda acak 10–25 detik antar-nomor agar aman dari blokir.</p>`;
+  if (m === "sekali") return `<div class="wa-grid">${field("wa_tgl", "Tanggal", WA_C.tgl || waTanggalIni(), { type: "date" })}${jam}</div>`;
+  if (m === "harian") return `<div class="wa-grid">${jam}</div><p class="hint">Setiap hari dikirim satu materi, bergiliran dari materi pertama sampai terakhir lalu mengulang.</p>`;
+  if (m === "mingguan") return `<label class="f">Hari</label>${waChk("wa_hari", WA_HARI.map((h, i) => [i + 1, h]), WA_C.hari || [5])}<div class="wa-grid" style="margin-top:10px">${jam}</div>`;
+  return `<label class="f">Pekan</label>${waChk("wa_pekan", [[1, "Pekan 1"], [2, "Pekan 2"], [3, "Pekan 3"], [4, "Pekan 4"]], WA_C.pekan || [])}
+    <div class="wa-grid" style="margin-top:10px">${field("wa_tanggal", "Atau tanggal (pisahkan koma)", WA_C.tanggal || "", { ph: "Contoh: 1, 15" })}${jam}</div>
+    <label class="f" style="margin-top:10px">Bulan</label>${waChk("wa_bulan", WA_BULAN.map((b, i) => [i + 1, b.slice(0, 3)]), WA_C.bulan || WA_BULAN.map((_, i) => i + 1))}`;
+}
+function waSimpanWaktu() {
+  if ($("#wa_jam")) WA_C.jam = val("wa_jam");
+  if ($("#wa_tgl")) WA_C.tgl = val("wa_tgl");
+  if ($("#wa_tanggal")) WA_C.tanggal = val("wa_tanggal");
+  if ($("input[name=wa_hari]")) WA_C.hari = $$("input[name=wa_hari]:checked").map((x) => +x.value);
+  if ($("input[name=wa_pekan]")) WA_C.pekan = $$("input[name=wa_pekan]:checked").map((x) => +x.value);
+  if ($("input[name=wa_bulan]")) WA_C.bulan = $$("input[name=wa_bulan]:checked").map((x) => +x.value);
+}
+
+async function waKirim() {
+  const L = WA_DATA.labels, G = WA_DATA.grup;
+  $("#wa_body").innerHTML = `
+    <div class="panel"><h2>1. Penerima</h2>
+      <div class="wa-grid">${field("wa_don", "Donatur", WA_C.donatur, { sel: Object.entries(WA_AUDIENS) })}</div>
+      <div class="wa-sec"><label class="f">Kontak WA ${WA_DATA.kontak_total ? `<small>(${WA_DATA.kontak_total} kontak)</small>` : ""}</label>
+        ${WA_DATA.kontak_total ? `<div class="wa-chks"><label><input type="checkbox" id="wa_ksemua" ${WA_C.kontak_semua ? "checked" : ""}> <b>Semua kontak</b></label></div>
+          ${L.length ? waChk("wa_lbl", L.map((x) => [x.label, `${esc(x.label)} <small>(${x.n})</small>`]), WA_C.label) : ""}`
+          : `<p class="hint" style="margin:0">Belum ada kontak. Tambahkan di tab <a href="#" data-goto="kontak">Kontak</a>, atau tempel nomor di bawah.</p>`}</div>
+      <div class="wa-sec"><label class="f">Grup WA</label>
+        ${G.length ? `<div class="wa-glist">${G.map((g) => `<div class="wa-g"><div><b>${esc(g.nama)}</b><small>${g.anggota} anggota tercatat</small></div>
+            <label><input type="checkbox" name="wa_grup" value="${esc(g.id)}" ${WA_C.grup.includes(g.id) ? "checked" : ""}> Kirim ke grup</label>
+            <label class="${g.anggota ? "" : "wa-dis"}"><input type="checkbox" name="wa_ang" value="${esc(g.id)}" ${WA_C.anggota.includes(g.id) ? "checked" : ""} ${g.anggota ? "" : "disabled"}> Kirim pribadi ke anggota</label></div>`).join("")}</div>`
+          : `<p class="hint" style="margin:0">Belum ada grup. Ambil daftar grup di tab <a href="#" data-goto="grup">Grup</a>.</p>`}</div>
+      <div class="wa-sec"><label class="f">Pilih orang tertentu</label>
+        <div class="inp"><input id="wa_cari" placeholder="Ketik nama atau nomor kontak / donatur" autocomplete="off"></div>
+        <div id="wa_hasil" class="wa-hasil"></div><div id="wa_dipilih" class="wa-dipilih"></div></div>
+      <div class="wa-sec">${field("wa_nomor", "Nomor baru (satu per baris, boleh dengan nama)", WA_C.nomor, { area: true, rows: 3, ph: "Contoh:\nAhmad - 0812 3456 7890\n0813xxxxxxx" })}
+        <div class="acts" style="margin-top:6px">${waBisaKontakHP() ? `<button class="btn ghost xs" id="wa_hp">${ic("user", 14)} Ambil dari kontak HP</button>` : ""}
+          <label class="btn ghost xs" style="cursor:pointer">Impor file kontak (.vcf/.csv)<input type="file" id="wa_file" accept=".vcf,.csv,.txt,text/vcard,text/csv" hidden></label></div>
+        ${waBisaKontakHP() ? "" : `<p class="hint">Tombol "Ambil dari kontak HP" muncul bila admin membuka aplikasi lewat Chrome di HP Android.</p>`}</div>
+      <div class="wa-total" id="wa_total">Menghitung penerima…</div></div>
+
+    <div class="panel" style="margin-top:16px"><h2>2. Isi pesan</h2>
+      <div class="wa-grid">${field("wa_judul", "Judul (untuk catatan admin)", WA_C.judul, { ph: "Contoh: Hadits harian, Undangan kajian" })}${field("wa_jenis", "Jenis", WA_C.jenis, { sel: WA_JENIS })}</div>
+      <div class="wa-seg" style="margin-top:12px">${[["tulis", "Tulis pesan"], ["sheet", "Ambil dari Google Sheet"]].map(([k, l]) => `<button class="${WA_C.sumber === k ? "on" : ""}" data-sumber="${k}">${l}</button>`).join("")}</div>
+      <div id="wa_isi_box" style="margin-top:12px"></div></div>
+
+    <div class="panel" style="margin-top:16px"><h2>3. Waktu kirim</h2>
+      <div class="wa-seg">${Object.entries(WA_MODE).map(([k, l]) => `<button class="${WA_C.mode === k ? "on" : ""}" data-mode="${k}">${l}</button>`).join("")}</div>
+      <div id="wa_waktu" style="margin-top:12px">${waBoxWaktu()}</div>
+      <div class="acts" style="margin-top:16px"><button class="btn primary" id="wa_go">${WA_C.mode === "sekarang" ? ic("wa", 16) + " Kirim sekarang" : "Simpan jadwal"}</button></div></div>`;
+
+  $$("[data-goto]").forEach((a) => a.onclick = (e) => { e.preventDefault(); WA_TAB = a.dataset.goto; VIEWS.pesanwa(); });
+  // ---- penerima ----
+  let tHitung;
+  const hitung = () => { clearTimeout(tHitung); tHitung = setTimeout(async () => {
+    try { const r = await api("admin/wa/pratinjau", { method: "POST", body: { target: waTarget() } });
+      if (!$("#wa_total")) return;
+      $("#wa_total").innerHTML = r.jumlah || r.grup ? `Penerima: <b>${r.jumlah}</b> nomor pribadi${r.grup ? ` + <b>${r.grup}</b> grup` : ""}${r.contoh.length ? `<small>${esc(r.contoh.join(", "))}${r.jumlah > r.contoh.length ? ", …" : ""}</small>` : ""}` : "Belum ada penerima dipilih.";
+    } catch (e) { if ($("#wa_total")) $("#wa_total").textContent = e.message; } }, 350); };
+  const ambilPenerima = () => {
+    WA_C.donatur = val("wa_don"); WA_C.kontak_semua = !!$("#wa_ksemua")?.checked;
+    WA_C.label = $$("input[name=wa_lbl]:checked").map((x) => x.value);
+    WA_C.grup = $$("input[name=wa_grup]:checked").map((x) => x.value);
+    WA_C.anggota = $$("input[name=wa_ang]:checked").map((x) => x.value);
+    WA_C.nomor = $("#wa_nomor").value; hitung();
+  };
+  ["#wa_don", "#wa_ksemua"].forEach((s) => $(s)?.addEventListener("change", ambilPenerima));
+  $$("input[name=wa_lbl], input[name=wa_grup], input[name=wa_ang]").forEach((x) => x.onchange = ambilPenerima);
+  $("#wa_nomor").addEventListener("input", ambilPenerima);
+  const tampilPilih = () => {
+    $("#wa_dipilih").innerHTML = [...WA_C.pilih.values()].map((p) => `<span class="wa-pill">${esc(p.nama || "+" + p.wa)} <button data-lepas="${p.wa}" aria-label="Hapus">×</button></span>`).join("");
+    $$("[data-lepas]").forEach((b) => b.onclick = () => { WA_C.pilih.delete(b.dataset.lepas); tampilPilih(); hitung(); });
+  };
+  let tCari;
+  $("#wa_cari").oninput = () => { clearTimeout(tCari); tCari = setTimeout(async () => {
+    const q = val("wa_cari"); if (q.length < 2) { $("#wa_hasil").innerHTML = ""; return; }
+    const rows = await api("admin/wa/cari?q=" + encodeURIComponent(q));
+    $("#wa_hasil").innerHTML = rows.map((r) => `<button data-ambil='${esc(JSON.stringify(r))}'><b>${esc(r.nama || "(tanpa nama)")}</b> <span class="mono">+${r.wa}</span> <small>${r.sumber}</small></button>`).join("") || `<p class="hint">Tidak ditemukan. Tulis nomornya di kotak "Nomor baru".</p>`;
+    $$("[data-ambil]").forEach((b) => b.onclick = () => { const r = JSON.parse(b.dataset.ambil); WA_C.pilih.set(r.wa, r); $("#wa_cari").value = ""; $("#wa_hasil").innerHTML = ""; tampilPilih(); hitung(); });
+  }, 300); };
+  const tambahNomor = (items) => {
+    if (!items.length) return toast("Tidak ada nomor yang terbaca.");
+    const el = $("#wa_nomor"); el.value = (el.value.trim() ? el.value.trim() + "\n" : "") + waItemsKeTeks(items); ambilPenerima();
+    toast(`${items.length} nomor ditambahkan`);
+  };
+  $("#wa_hp")?.addEventListener("click", async () => { try { tambahNomor(await waAmbilKontakHP()); } catch (e) { toast("Kontak HP tidak dapat dibuka: " + e.message); } });
+  $("#wa_file").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; const t = await f.text(); tambahNomor(/BEGIN:VCARD/i.test(t) ? waParseVcf(t) : waParseCsv(t)); e.target.value = ""; };
+  tampilPilih(); hitung();
+
+  // ---- isi ----
+  const isiBox = () => {
+    if (WA_C.sumber === "sheet") {
+      $("#wa_isi_box").innerHTML = `<div class="wa-grid">${field("wa_sheet", "Tautan Google Sheet", WA_C.sheet_url, { ph: WA_SHEET_CONTOH, full: true })}${field("wa_kat", "Kategori (opsional)", WA_C.kategori, { ph: "hadits / ayat / kosongkan untuk semua" })}</div>
+        <p class="hint">Bagikan Sheet dengan akses <b>"Siapa saja yang memiliki link"</b> (Pelihat). Baris pertama berisi judul kolom: <span class="mono">judul, arab, terjemah, sumber, faedah, kategori, gambar</span>, atau satu kolom <span class="mono">pesan</span>. Satu baris = satu materi, dikirim bergiliran. Bisa memakai {nama}.</p>
+        <div class="acts"><button class="btn ghost sm" id="wa_cek_sheet">Cek Sheet</button></div><div id="wa_sheet_hasil"></div>`;
+      const simpan = () => { WA_C.sheet_url = val("wa_sheet"); WA_C.kategori = val("wa_kat"); };
+      $("#wa_sheet").oninput = simpan; $("#wa_kat").oninput = simpan;
+      $("#wa_cek_sheet").onclick = (e) => waTry(e.target, async () => {
+        simpan(); const r = await api("admin/wa/sheet/cek", { method: "POST", body: { url: WA_C.sheet_url, kategori: WA_C.kategori } });
+        $("#wa_sheet_hasil").innerHTML = `<p class="hint"><b>${r.jumlah} materi</b> terbaca. Contoh materi pertama:</p><div class="wa-bubble">${waBubble(r.contoh[0].teks)}${r.contoh[0].lampiran ? `<small>🖼 ${esc(r.contoh[0].lampiran)}</small>` : ""}</div>`;
+      });
+    } else {
+      $("#wa_isi_box").innerHTML = `<div class="wa-tools">${[["{nama}", "Nama"], ["*", "Tebal"], ["_", "Miring"], ["{Assalamu'alaikum|Salam}", "Variasi"], ["\n---\n", "Pesan berikutnya"]].map(([v, l]) => `<button class="btn ghost xs" data-sisip="${esc(v)}">${l}</button>`).join("")}</div>
+        <div class="wa-tulis"><div>${field("wa_isi", "Isi pesan", WA_C.isi, { area: true, rows: 9, ph: "Assalamu'alaikum {nama},\n\nTulis pesan di sini…" })}</div>
+          <div><label class="f">Pratinjau</label><div class="wa-bubble" id="wa_prev"></div></div></div>
+        ${field("wa_lamp", "Gambar (opsional): tautan https ke gambar", WA_C.lampiran, { ph: "https://…/poster.jpg" })}
+        <p class="hint"><b>{nama}</b> diganti nama penerima. <b>{Assalamu'alaikum|Salam}</b> dipilih acak per kelompok penerima agar pesan bervariasi. Untuk jadwal berulang, pisahkan beberapa pesan dengan baris <b>---</b>; setiap jadwal mengirim satu pesan secara bergiliran. Pesan pribadi otomatis diberi ajakan balas BERHENTI.</p>`;
+      const prev = () => { WA_C.isi = $("#wa_isi").value; $("#wa_prev").innerHTML = waBubble(WA_C.isi.split(/\n[ \t]*-{3,}[ \t]*(?:\n|$)/)[0]) || `<span class="hint">Pratinjau pesan</span>`; };
+      $("#wa_isi").addEventListener("input", prev); $("#wa_lamp").oninput = () => { WA_C.lampiran = val("wa_lamp"); };
+      $$("[data-sisip]").forEach((b) => b.onclick = () => {
+        const ta = $("#wa_isi"), v = b.dataset.sisip, s = ta.selectionStart, e = ta.selectionEnd, sel = ta.value.slice(s, e);
+        const ins = v === "*" || v === "_" ? v + (sel || "teks") + v : v;
+        ta.setRangeText(ins, s, e, "end"); ta.focus(); prev();
+      });
+      prev();
+    }
+  };
+  $$("[data-sumber]").forEach((b) => b.onclick = () => { WA_C.sumber = b.dataset.sumber; $$("[data-sumber]").forEach((x) => x.classList.toggle("on", x === b)); isiBox(); });
+  isiBox();
+  $("#wa_judul").oninput = () => { WA_C.judul = val("wa_judul"); };
+  $("#wa_jenis").onchange = () => { WA_C.jenis = val("wa_jenis"); };
+
+  // ---- waktu & kirim ----
+  $$("[data-mode]").forEach((b) => b.onclick = () => {
+    waSimpanWaktu(); WA_C.mode = b.dataset.mode; $$("[data-mode]").forEach((x) => x.classList.toggle("on", x === b));
+    $("#wa_waktu").innerHTML = waBoxWaktu();
+    $("#wa_go").innerHTML = WA_C.mode === "sekarang" ? ic("wa", 16) + " Kirim sekarang" : "Simpan jadwal";
+  });
+  $("#wa_go").onclick = (e) => {
+    ambilPenerima(); waSimpanWaktu();
+    const body = { judul: WA_C.judul || (WA_C.mode === "sekarang" ? "Kirim langsung " + new Date().toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" }) : ""),
+      jenis: WA_C.jenis, sumber: WA_C.sumber, isi: WA_C.isi, lampiran: WA_C.lampiran, sheet_url: WA_C.sheet_url, kategori: WA_C.kategori, mode: WA_C.mode, target: waTarget(),
+      jam: WA_C.jam, tanggal: WA_C.mode === "bulanan" ? WA_C.tanggal : WA_C.tgl, hari: WA_C.hari, pekan: WA_C.pekan, bulan: WA_C.bulan };
+    const go = () => waTry(e.target, async () => {
+      const r = await api("admin/wa/jadwal", { method: "POST", body }); closeModal();
+      if (WA_C.mode === "sekarang") { toast(`Terkirim ke antrean Fonnte: ${r.jumlah} pesan`); WA_C.isi = ""; WA_C.pilih.clear(); WA_C.nomor = ""; WA_TAB = "riwayat"; }
+      else { toast("Jadwal disimpan"); WA_TAB = "jadwal"; }
+      VIEWS.pesanwa();
+    });
+    if (WA_C.mode !== "sekarang") return go();
+    modal("Kirim sekarang?", `<p>${$("#wa_total").innerHTML}</p><p class="hint">Pesan yang sudah dikirim tidak dapat ditarik kembali.</p>`, `<button class="btn ghost sm" onclick="closeModal()">Batal</button><button class="btn primary sm" id="wa_ya">Ya, kirim</button>`);
+    $("#wa_ya").onclick = (ev) => { e = ev; go(); };
+  };
+}
+
+// ================= Tab: Terjadwal =================
+async function waJadwal(d) {
+  const list = d.jadwal.filter((j) => j.aktif || j.mode !== "sekali" || j.terakhir_tgl !== j.tanggal_mulai || j.menunggu);
+  $("#wa_body").innerHTML = `<div class="panel"><h2>Pesan terjadwal</h2>
+    <p class="hint" style="margin-top:0">Jadwal diperiksa otomatis tiap 15 menit. Tombol <b>Kirim materi berikutnya</b> mengirim giliran berikutnya saat ini juga.</p>
+    <div class="tw"><table class="t"><thead><tr><th>Judul</th><th>Penerima</th><th>Jadwal</th><th>Materi</th><th class="num">Terkirim</th><th class="num">Gagal</th><th></th></tr></thead><tbody>
+    ${list.map((j) => `<tr class="${j.aktif ? "" : "wa-off"}"><td><b>${esc(j.judul)}</b><small>${esc(WA_JENIS.find((x) => x[0] === j.jenis)?.[1] || j.jenis)}${j.aktif ? "" : " · nonaktif"}</small>${j.catatan ? `<small style="color:var(--danger)">${esc(j.catatan)}</small>` : ""}</td>
+      <td>${esc(waTargetText(j.target))}</td><td>${esc(waJadwalText(j))}</td>
+      <td>${j.sumber === "sheet" ? `Google Sheet${j.kategori ? " · " + esc(j.kategori) : ""}<small>giliran ke-${(j.baris_idx || 0) + 1}</small>` : `${j.baris} pesan<small>giliran ke-${((j.baris_idx || 0) % Math.max(1, j.baris)) + 1}</small>`}</td>
+      <td class="num">${j.terkirim}</td><td class="num">${j.gagal}${j.gagal ? `<br><button class="btn ghost xs" data-ulang="${j.id}">Kirim ulang</button>` : ""}</td>
+      <td class="wa-act"><button class="btn ghost xs" data-now="${j.id}">Kirim materi berikutnya</button><button class="btn ghost xs" data-aktif="${j.id}" data-on="${j.aktif ? 0 : 1}">${j.aktif ? "Nonaktifkan" : "Aktifkan"}</button><button class="btn ghost xs" data-hapus="${j.id}" style="color:var(--danger)">Hapus</button></td></tr>`).join("")
+      || `<tr><td colspan="7" class="hint" style="text-align:center;padding:24px">Belum ada jadwal. Buat di tab Kirim pesan, lalu pilih waktu Harian, Mingguan, atau Bulanan.</td></tr>`}</tbody></table></div></div>`;
+  $$("[data-now]").forEach((b) => b.onclick = () => waTry(b, async () => { const r = await api(`admin/wa/jadwal/${b.dataset.now}/kirim`, { method: "POST" }); toast(`${r.jumlah} pesan dikirim`); VIEWS.pesanwa(); }));
+  $$("[data-ulang]").forEach((b) => b.onclick = () => waTry(b, async () => { const r = await api(`admin/wa/jadwal/${b.dataset.ulang}/ulang`, { method: "POST" }); toast(`${r.jumlah} pesan dikirim ulang`); VIEWS.pesanwa(); }));
+  $$("[data-aktif]").forEach((b) => b.onclick = () => waTry(b, async () => { await api(`admin/wa/jadwal/${b.dataset.aktif}/aktif`, { method: "POST", body: { aktif: b.dataset.on === "1" } }); VIEWS.pesanwa(); }));
+  $$("[data-hapus]").forEach((b) => b.onclick = () => { modal("Hapus jadwal", `<p>Jadwal ini dihapus dan pesan yang masih menunggu di antrean dibatalkan. Riwayat yang sudah terkirim tetap ada.</p>`, `<button class="btn danger sm" id="hap_ok">Ya, hapus</button>`);
+    $("#hap_ok").onclick = (e) => waTry(e.target, async () => { await api(`admin/wa/jadwal/${b.dataset.hapus}`, { method: "DELETE" }); closeModal(); toast("Jadwal dihapus"); VIEWS.pesanwa(); }); });
+}
+
+// ================= Tab: Riwayat =================
+let WA_RST = "";
+async function waRiwayat() {
+  const r = await api("admin/wa/riwayat" + (WA_RST ? "?status=" + WA_RST : ""));
+  const T = { menunggu: ["Menunggu", "st-pending"], terkirim: ["Terkirim", "st-paid"], gagal: ["Gagal", "st-failed"] };
+  $("#wa_body").innerHTML = `<div class="panel"><h2>Riwayat pengiriman</h2>
+    <div class="acts" style="margin-bottom:12px">${[["", "Semua"], ["menunggu", "Menunggu"], ["terkirim", "Terkirim"], ["gagal", "Gagal"]].map(([k, l]) => `<button class="btn ${WA_RST === k ? "primary" : "ghost"} xs" data-rst="${k}">${l}${k ? ` (${r.total[k] || 0})` : ""}</button>`).join("")}
+      <button class="btn ghost xs" id="wa_proses" style="margin-left:auto">Proses antrean sekarang</button></div>
+    <p class="hint" style="margin-top:0">"Terkirim" berarti pesan sudah diterima antrean Fonnte. Fonnte mengirimkannya bertahap dengan jeda acak.</p>
+    <div class="tw"><table class="t"><thead><tr><th>Waktu</th><th>Judul</th><th>Tujuan</th><th>Pesan</th><th>Status</th></tr></thead><tbody>
+    ${r.rows.map((x) => `<tr><td>${tglD(x.dikirim_at || x.created_at)}</td><td>${esc(x.judul || "-")}</td><td>${x.grup ? `👥 ${esc(x.nama)}` : `${esc(x.nama || "")}<small class="mono">+${esc(x.wa)}</small>`}</td>
+      <td><div class="wa-cut">${esc(x.pesan)}</div></td><td><span class="tag ${T[x.status]?.[1] || ""}">${T[x.status]?.[0] || x.status}</span>${x.alasan ? `<small>${esc(x.alasan)}</small>` : ""}</td></tr>`).join("")
+      || `<tr><td colspan="5" class="hint" style="text-align:center;padding:24px">Belum ada pesan.</td></tr>`}</tbody></table></div></div>`;
+  $$("[data-rst]").forEach((b) => b.onclick = () => { WA_RST = b.dataset.rst; waRiwayat(); });
+  $("#wa_proses").onclick = (e) => waTry(e.target, async () => { const x = await api("admin/wa/proses", { method: "POST" }); toast(`${x.terkirim} terkirim, ${x.gagal} gagal`); waRiwayat(); });
+}
+
+// ================= Tab: Kontak =================
+let WA_KQ = "", WA_KL = "";
+async function waKontak() {
+  const r = await api(`admin/wa/kontak?q=${encodeURIComponent(WA_KQ)}&label=${encodeURIComponent(WA_KL)}`);
+  const L = WA_DATA.labels;
+  $("#wa_body").innerHTML = `<div class="panel"><h2>Tambah kontak</h2>
+      <div class="wa-grid">${field("k_nama", "Nama", "", { ph: "Nama" })}${field("k_wa", "Nomor WhatsApp", "", { ph: "08xx" })}${field("k_lbl", "Label (pisahkan koma)", "", { ph: "Pengurus, Relawan", list: "k_lbls" })}</div>
+      <datalist id="k_lbls">${L.map((x) => `<option value="${esc(x.label)}">`).join("")}</datalist>
+      <div class="acts" style="margin-top:8px"><button class="btn primary sm" id="k_add">Simpan kontak</button></div>
+      <h3 style="margin:20px 0 8px">Tambah banyak sekaligus</h3>
+      ${field("k_teks", "Tempel daftar (satu per baris: nama dan nomor)", "", { area: true, rows: 4, ph: "Ahmad - 0812 3456 7890\nSiti 0813xxxxxxx" })}
+      <div class="wa-grid">${field("k_lbl2", "Label untuk kontak yang diimpor", "", { ph: "Contoh: Majelis Taklim", list: "k_lbls" })}</div>
+      <div class="acts" style="margin-top:8px"><button class="btn ghost sm" id="k_tempel">Simpan daftar</button>
+        ${waBisaKontakHP() ? `<button class="btn ghost sm" id="k_hp">${ic("user", 14)} Ambil dari kontak HP</button>` : ""}
+        <label class="btn ghost sm" style="cursor:pointer">Impor file .vcf / .csv<input type="file" id="k_file" accept=".vcf,.csv,.txt,text/vcard,text/csv" hidden></label></div>
+      <p class="hint">File kontak bisa diekspor dari Google Contacts (contacts.google.com → Ekspor → vCard atau Google CSV) atau dari aplikasi Kontak di HP. ${waBisaKontakHP() ? "" : 'Tombol "Ambil dari kontak HP" tersedia saat aplikasi dibuka di Chrome Android.'}</p></div>
+    <div class="panel" style="margin-top:16px"><h2>Daftar kontak <small>(${r.total})</small></h2>
+      <div class="fbar"><div class="inp grow"><input id="k_q" placeholder="Cari nama atau nomor" value="${esc(WA_KQ)}"></div>
+        <div class="inp"><select id="k_fl"><option value="">Semua label</option>${L.map((x) => `<option ${WA_KL === x.label ? "selected" : ""}>${esc(x.label)}</option>`).join("")}</select></div></div>
+      <div class="tw"><table class="t"><thead><tr><th>Nama</th><th>WhatsApp</th><th>Label</th><th></th></tr></thead><tbody>
+      ${r.rows.map((k) => `<tr><td>${esc(k.nama || "-")}</td><td class="mono">+${esc(k.wa)}</td><td>${(k.label || "").split(",").filter((x) => x.trim()).map((x) => `<span class="wa-lbl">${esc(x.trim())}</span>`).join(" ")}</td>
+        <td class="wa-act"><button class="btn ghost xs" data-kedit='${esc(JSON.stringify(k))}'>Ubah</button><button class="btn ghost xs" data-kdel="${k.wa}" style="color:var(--danger)">Hapus</button></td></tr>`).join("")
+        || `<tr><td colspan="4" class="hint" style="text-align:center;padding:24px">Belum ada kontak.</td></tr>`}</tbody></table></div>
+      ${r.total > r.rows.length ? `<p class="hint">Menampilkan ${r.rows.length} dari ${r.total}. Gunakan pencarian untuk mempersempit.</p>` : ""}</div>`;
+  const muat = async () => { WA_DATA = await api("admin/wa/data"); waKontak(); };
+  const impor = async (body) => { const x = await api("admin/wa/kontak/impor", { method: "POST", body }); toast(`${x.tersimpan} kontak tersimpan (${x.baru} baru)`); await muat(); };
+  $("#k_add").onclick = (e) => waTry(e.target, async () => { await api("admin/wa/kontak", { method: "POST", body: { nama: val("k_nama"), wa: val("k_wa"), label: val("k_lbl") } }); toast("Kontak disimpan"); await muat(); });
+  $("#k_tempel").onclick = (e) => waTry(e.target, () => impor({ teks: $("#k_teks").value, label: val("k_lbl2"), sumber: "tempel" }));
+  $("#k_hp")?.addEventListener("click", (e) => waTry(e.target, async () => impor({ items: await waAmbilKontakHP(), label: val("k_lbl2"), sumber: "hp" })));
+  $("#k_file").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; const t = await f.text(); const items = /BEGIN:VCARD/i.test(t) ? waParseVcf(t) : waParseCsv(t);
+    try { await impor({ items, label: val("k_lbl2"), sumber: f.name.split(".").pop().toLowerCase() }); } catch (er) { toast(er.message); } e.target.value = ""; };
+  let tq; $("#k_q").oninput = () => { clearTimeout(tq); tq = setTimeout(() => { WA_KQ = val("k_q"); waKontak(); }, 400); };
+  $("#k_fl").onchange = () => { WA_KL = val("k_fl"); waKontak(); };
+  $$("[data-kdel]").forEach((b) => b.onclick = () => waTry(b, async () => { await api(`admin/wa/kontak/${b.dataset.kdel}`, { method: "DELETE" }); toast("Kontak dihapus"); await muat(); }));
+  $$("[data-kedit]").forEach((b) => b.onclick = () => { const k = JSON.parse(b.dataset.kedit);
+    modal("Ubah kontak", `<div class="wa-grid">${field("ke_nama", "Nama", k.nama || "")}${field("ke_lbl", "Label (pisahkan koma)", k.label || "", { list: "k_lbls" })}</div><p class="hint mono">+${esc(k.wa)}</p>`, `<button class="btn primary sm" id="ke_ok">Simpan</button>`);
+    $("#ke_ok").onclick = (e) => waTry(e.target, async () => { await api("admin/wa/kontak", { method: "POST", body: { wa: k.wa, nama: val("ke_nama"), label: val("ke_lbl"), ganti_label: true } }); closeModal(); toast("Kontak diperbarui"); await muat(); }); });
+}
+
+// ================= Tab: Grup =================
+async function waGrup(d) {
+  const G = WA_DATA.grup;
+  $("#wa_body").innerHTML = `<div class="panel"><h2>Grup WhatsApp</h2>
+      <p class="hint" style="margin-top:0">Nomor WhatsApp yang terhubung ke Fonnte harus sudah menjadi anggota grup. Tekan tombol di bawah setiap kali nomor itu bergabung ke grup baru.</p>
+      <div class="acts"><button class="btn primary sm" id="g_sync">Ambil daftar grup dari Fonnte</button></div>
+      <div class="tw" style="margin-top:12px"><table class="t"><thead><tr><th>Grup</th><th class="num">Anggota tercatat</th><th></th></tr></thead><tbody>
+      ${G.map((g) => `<tr><td><b>${esc(g.nama)}</b><small class="mono">${esc(g.id)}</small></td><td class="num">${g.anggota}</td>
+        <td class="wa-act"><button class="btn ghost xs" data-gang="${esc(g.id)}" data-gnama="${esc(g.nama)}">Anggota</button><button class="btn ghost xs" data-gdel="${esc(g.id)}" style="color:var(--danger)">Hapus</button></td></tr>`).join("")
+        || `<tr><td colspan="3" class="hint" style="text-align:center;padding:24px">Belum ada grup.</td></tr>`}</tbody></table></div></div>
+    <div class="panel" style="margin-top:16px"><h2>Tentang anggota grup</h2>
+      <p class="hint" style="margin-top:0">Fonnte tidak menyediakan daftar anggota grup. Aplikasi mencatat anggota dengan dua cara:</p>
+      <ol class="hint" style="margin:0;padding-left:18px"><li><b>Otomatis</b>: setiap anggota yang menulis pesan di grup tercatat lewat webhook (alamat webhook ada di tab Berhenti).</li>
+        <li><b>Manual</b>: buka info grup di WhatsApp, salin nomor anggota, lalu tempel di tombol Anggota.</li></ol>
+      <h3 style="margin:16px 0 8px">Tambah grup manual</h3>
+      <div class="wa-grid">${field("g_id", "ID grup (berakhiran @g.us)", "", { ph: "1203630xxxxxxx@g.us" })}${field("g_nama", "Nama grup", "")}</div>
+      <div class="acts" style="margin-top:8px"><button class="btn ghost sm" id="g_add">Simpan grup</button></div></div>`;
+  const muat = async () => { WA_DATA = await api("admin/wa/data"); waGrup(d); };
+  $("#g_sync").onclick = (e) => waTry(e.target, async () => { const r = await api("admin/wa/grup/sinkron", { method: "POST" }); toast(`${r.jumlah} grup ditemukan`); await muat(); });
+  $("#g_add").onclick = (e) => waTry(e.target, async () => { await api("admin/wa/grup", { method: "POST", body: { id: val("g_id"), nama: val("g_nama") } }); toast("Grup disimpan"); await muat(); });
+  $$("[data-gdel]").forEach((b) => b.onclick = () => { modal("Hapus grup", `<p>Grup dan daftar anggotanya dihapus dari aplikasi. Grup di WhatsApp tidak terpengaruh.</p>`, `<button class="btn danger sm" id="gd_ok">Ya, hapus</button>`);
+    $("#gd_ok").onclick = (e) => waTry(e.target, async () => { await api(`admin/wa/grup/${encodeURIComponent(b.dataset.gdel)}`, { method: "DELETE" }); closeModal(); toast("Grup dihapus"); await muat(); }); });
+  $$("[data-gang]").forEach((b) => b.onclick = () => waAnggota(b.dataset.gang, b.dataset.gnama, muat));
+}
+async function waAnggota(id, nama, muat) {
+  const rows = await api(`admin/wa/grup/${encodeURIComponent(id)}/anggota`);
+  modal("Anggota " + esc(nama), `<div class="tw" style="max-height:260px;overflow:auto"><table class="t"><tbody>
+    ${rows.map((a) => `<tr><td>${esc(a.nama || "-")}<small class="mono">+${esc(a.wa)}</small></td><td><small>${a.sumber === "webhook" ? "otomatis" : "manual"}</small></td><td class="num"><button class="btn ghost xs" data-adel="${a.wa}" style="color:var(--danger)">Hapus</button></td></tr>`).join("")
+      || `<tr><td class="hint">Belum ada anggota tercatat.</td></tr>`}</tbody></table></div>
+    ${field("a_teks", "Tambah anggota (tempel nomor, satu per baris)", "", { area: true, rows: 4, ph: "Ahmad 0812xxxx\n0813xxxx" })}`, `<button class="btn primary sm" id="a_ok">Simpan anggota</button>`, true);
+  $("#a_ok").onclick = (e) => waTry(e.target, async () => { const r = await api(`admin/wa/grup/${encodeURIComponent(id)}/anggota`, { method: "POST", body: { teks: $("#a_teks").value } }); toast(`${r.jumlah} anggota disimpan`); closeModal(); await muat(); });
+  $$("[data-adel]").forEach((b) => b.onclick = () => waTry(b, async () => { await api(`admin/wa/grup/${encodeURIComponent(id)}/anggota/${b.dataset.adel}`, { method: "DELETE" }); b.closest("tr").remove(); WA_DATA = await api("admin/wa/data"); }));
+}
+
+// ================= Tab: Berhenti & webhook =================
+async function waBerhenti(d, qs) {
+  const konfirm = (qs.get("berhenti") || "").replace(/\D/g, "");
+  const berhenti = await api("admin/wa/berhenti");
+  const tag = (s) => (s === "dikonfirmasi" ? `<span class="tag st-paid">Berhenti</span>` : `<span class="tag st-pending">Menunggu konfirmasi</span>`);
+  $("#wa_body").innerHTML = `${konfirm ? `<div class="panel" style="margin-bottom:16px;border:2px solid #f59e0b"><h2>Konfirmasi berhenti</h2>
       <p>Nomor <b class="mono">+${esc(konfirm)}</b> meminta berhenti. Nomor ini sudah tidak menerima pesan. Tekan tombol untuk mencatatnya.</p>
       <button class="btn primary sm" id="wa_kf">Konfirmasi berhenti</button></div>` : ""}
-    ${!d.token_ok ? `<div class="alert"><span>Token Fonnte belum diatur. Isi di Pengaturan → Notifikasi WhatsApp agar pesan bisa dikirim.</span></div>` : ""}
-    <div class="panel"><h2>Buat pesan</h2>
-      <div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
-        ${field("wa_judul", "Judul", "", { ph: "Contoh: Hadits Jumat pagi", full: true })}
-        ${field("wa_jenis", "Jenis isi", "teks", { sel: [["teks", "Teks bebas"], ["hadits", "Hadits"], ["ayat", "Ayat"]] })}
-        ${field("wa_audiens", "Penerima", "semua", { sel: Object.entries(WA_AUDIENS) })}
-        ${field("wa_mode", "Jadwal", "sekali", { sel: Object.entries(WA_MODE) })}
-        <div id="wa_box" class="full" style="display:contents">${waBox("sekali")}</div>
-        ${field("wa_isi", "Isi pesan (satu baris = satu pesan, berputar dari baris pertama setelah baris terakhir)", "", { area: true, rows: 6, full: true, ph: "Tulis pesan. Gunakan {nama} untuk nama donatur." })}
-      </div>
-      <p class="hint">Hadits dan ayat wajib dari sumber shahih. Setiap pesan otomatis menyertakan ajakan balas BERHENTI.</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-        <button class="btn ghost sm" id="wa_cek">Cek jumlah penerima</button>
-        <button class="btn primary sm" id="wa_simpan">Simpan jadwal</button>
-      </div></div>
-    <div class="panel" style="margin-top:16px"><h2>Jadwal</h2>
-      <p class="hint" style="margin-top:0">Menunggu di antrean: <b>${d.menunggu_total}</b>. Pengiriman berjalan otomatis tiap 15 menit, sekitar 25 pesan per proses.</p>
-      <div class="tw"><table class="t"><thead><tr><th>Judul</th><th>Penerima</th><th>Jadwal</th><th class="num">Isi</th><th class="num">Terkirim</th><th class="num">Gagal</th><th class="num">Antre</th><th></th></tr></thead><tbody>
-      ${d.jadwal.map((j) => `<tr><td><b>${esc(j.judul)}</b><small>${esc(WA_MODE[j.mode] || j.mode)} · ${esc(j.jenis)}</small></td><td>${esc(WA_AUDIENS[j.audiens] || j.audiens)}</td><td>${esc(waJadwalText(j))}</td>
-        <td class="num">${j.baris} baris</td><td class="num">${j.terkirim}</td><td class="num">${j.gagal}</td><td class="num">${j.menunggu}</td>
-        <td style="white-space:nowrap"><button class="btn ghost xs" data-aktif="${j.id}" data-on="${j.aktif ? 0 : 1}">${j.aktif ? "Nonaktifkan" : "Aktifkan"}</button> <button class="btn ghost xs" data-hapus="${j.id}" style="color:var(--danger)">Hapus</button></td></tr>`).join("")
-        || `<tr><td colspan="8" class="hint" style="text-align:center;padding:24px">Belum ada jadwal.</td></tr>`}</tbody></table></div></div>
-    <div class="panel" style="margin-top:16px"><h2>Berhenti menerima pesan</h2>
-      <p class="hint" style="margin-top:0">Donatur yang membalas BERHENTI tidak menerima pesan lagi. Admin menerima pemberitahuan WhatsApp berisi tautan konfirmasi.</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">${field("wa_bwa", "Nomor WhatsApp", "", { ph: "08xx" })}${field("wa_bnm", "Nama (opsional)", "", { ph: "Nama" })}<button class="btn ghost sm" id="wa_tambah_b">Tambahkan ke daftar berhenti</button></div>
-      <div class="tw"><table class="t"><thead><tr><th>WhatsApp</th><th>Nama</th><th>Status</th><th>Waktu</th></tr></thead><tbody>
-      ${berhenti.map((b) => `<tr><td class="mono">+${esc(b.wa)}</td><td>${esc(b.nama || "-")}</td><td>${tag(b.status)}</td><td>${tglD(b.created_at)}</td></tr>`).join("")
-        || `<tr><td colspan="4" class="hint" style="text-align:center;padding:24px">Belum ada yang berhenti.</td></tr>`}</tbody></table></div></div>
+    <div class="panel"><h2>Berhenti menerima pesan</h2>
+      <p class="hint" style="margin-top:0">Nomor yang membalas BERHENTI tidak menerima pesan pribadi lagi. Admin menerima pemberitahuan WhatsApp berisi tautan konfirmasi.</p>
+      <div class="wa-grid">${field("wa_bwa", "Nomor WhatsApp", "", { ph: "08xx" })}${field("wa_bnm", "Nama (opsional)", "", { ph: "Nama" })}</div>
+      <div class="acts" style="margin:8px 0 12px"><button class="btn ghost sm" id="wa_tambah_b">Tambahkan ke daftar berhenti</button></div>
+      <div class="tw"><table class="t"><thead><tr><th>WhatsApp</th><th>Nama</th><th>Status</th><th>Waktu</th><th></th></tr></thead><tbody>
+      ${berhenti.map((b) => `<tr><td class="mono">+${esc(b.wa)}</td><td>${esc(b.nama || "-")}</td><td>${tag(b.status)}</td><td>${tglD(b.created_at)}</td><td class="wa-act"><button class="btn ghost xs" data-izin="${b.wa}">Izinkan lagi</button></td></tr>`).join("")
+        || `<tr><td colspan="5" class="hint" style="text-align:center;padding:24px">Belum ada yang berhenti.</td></tr>`}</tbody></table></div></div>
     <div class="panel" style="margin-top:16px"><h2>Webhook Fonnte</h2>
-      <p class="hint" style="margin-top:0">Di dashboard Fonnte, isi kolom webhook dengan alamat berikut agar balasan BERHENTI masuk ke aplikasi:</p>
-      <input readonly value="${esc(d.webhook)}" onclick="this.select()" style="width:100%;font-size:13px"></div>`);
-
-  const boxMode = () => { $("#wa_box").innerHTML = waBox(val("wa_mode")); };
-  $("#wa_mode").onchange = boxMode;
-  $("#wa_cek").onclick = async (e) => busy(e.target, async () => { const r = await api("admin/wa/pratinjau", { method: "POST", body: { audiens: val("wa_audiens") } }); toast(`${r.jumlah} penerima`); });
-  $("#wa_simpan").onclick = (e) => busy(e.target, async () => {
-    const mode = val("wa_mode");
-    const body = { judul: val("wa_judul"), jenis: val("wa_jenis"), audiens: val("wa_audiens"), mode, isi: $("#wa_isi").value, jam: val("wa_jam"), tanggal: val("wa_tgl"), tanggal_mulai: val("wa_tgl"),
-      hari: $$("input[name=wa_hari]:checked").map((x) => x.value), pekan: $$("input[name=wa_pekan]:checked").map((x) => x.value), bulan: $$("input[name=wa_bulan]:checked").map((x) => x.value), tanggal_bulanan: val("wa_tanggal") };
-    if (mode === "bulanan") body.tanggal = val("wa_tanggal");
-    const r = await api("admin/wa/jadwal", { method: "POST", body });
-    toast(mode === "sekarang" ? `Pesan masuk antrean untuk ${r.jumlah} penerima` : "Jadwal disimpan"); VIEWS.pesanwa();
-  });
-  $$("[data-aktif]").forEach((b) => b.onclick = async () => { try { await api(`admin/wa/jadwal/${b.dataset.aktif}/aktif`, { method: "POST", body: { aktif: b.dataset.on === "1" } }); VIEWS.pesanwa(); } catch (e) { toast(e.message); } });
-  $$("[data-hapus]").forEach((b) => b.onclick = () => { modal("Hapus jadwal", `<p>Jadwal ini dihapus dan pesan yang masih menunggu di antrean dibatalkan. Riwayat yang sudah terkirim tetap ada.</p>`, `<button class="btn danger sm" id="hap_ok">Ya, hapus</button>`);
-    $("#hap_ok").onclick = (e) => busy(e.target, async () => { await api(`admin/wa/jadwal/${b.dataset.hapus}`, { method: "DELETE" }); closeModal(); toast("Jadwal dihapus"); VIEWS.pesanwa(); }); });
-  $("#wa_kf")?.addEventListener("click", (e) => busy(e.target, async () => { await api(`admin/wa/berhenti/${konfirm}/konfirmasi`, { method: "POST" }); toast("Berhenti dikonfirmasi"); location.hash = "#pesanwa"; VIEWS.pesanwa(); }));
-  $("#wa_tambah_b").onclick = (e) => busy(e.target, async () => { await api("admin/wa/berhenti", { method: "POST", body: { wa: val("wa_bwa"), nama: val("wa_bnm") } }); toast("Ditambahkan ke daftar berhenti"); VIEWS.pesanwa(); });
-};
+      <p class="hint" style="margin-top:0">Di dashboard Fonnte (menu Device → Edit), isi kolom <b>Webhook</b> dengan alamat berikut. Webhook dipakai untuk balasan BERHENTI dan pencatatan anggota grup otomatis.</p>
+      <div class="inp"><input readonly value="${esc(d.webhook)}" onclick="this.select()" style="font-size:13px"></div></div>`;
+  $("#wa_kf")?.addEventListener("click", (e) => waTry(e.target, async () => { await api(`admin/wa/berhenti/${konfirm}/konfirmasi`, { method: "POST" }); toast("Berhenti dikonfirmasi"); location.hash = "#pesanwa"; }));
+  $("#wa_tambah_b").onclick = (e) => waTry(e.target, async () => { await api("admin/wa/berhenti", { method: "POST", body: { wa: val("wa_bwa"), nama: val("wa_bnm") } }); toast("Ditambahkan ke daftar berhenti"); VIEWS.pesanwa(); });
+  $$("[data-izin]").forEach((b) => b.onclick = () => waTry(b, async () => { await api(`admin/wa/berhenti/${b.dataset.izin}`, { method: "DELETE" }); toast("Nomor bisa menerima pesan lagi"); VIEWS.pesanwa(); }));
+}
 
 /* ---------- Upah & penarikan ---------- */
 let UPAH_TAB = "diajukan";

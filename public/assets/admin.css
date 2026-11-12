@@ -144,3 +144,40 @@ a.kpi{color:var(--ink);display:block} a.kpi:hover{box-shadow:0 0 0 2px var(--gre
 @media (max-width:560px){.rinci label{grid-template-columns:110px 1fr}.peta{height:calc(100vh - 290px)}}
 .sheet-f{flex-wrap:wrap}
 @media (max-width:560px){.sheet-f .btn{flex:1 1 auto;justify-content:center}.sheet-f .btn[style*="margin-right:auto"]{flex-basis:100%;margin-right:0!important;order:9}}
+
+/* Pesan WA */
+.wa-tabs{display:flex;gap:4px;overflow-x:auto;background:var(--card);border-radius:12px;padding:4px;box-shadow:var(--shadow);margin-bottom:14px;scrollbar-width:none}
+.wa-tabs button{flex:1 0 auto;padding:9px 14px;border-radius:9px;font-weight:700;font-size:13px;color:var(--muted);white-space:nowrap}
+.wa-tabs button.on{background:var(--green);color:#fff}
+.wa-badge{display:inline-block;min-width:18px;padding:0 5px;border-radius:99px;background:var(--orange,#f59e0b);color:#fff;font-size:11px;line-height:18px}
+.wa-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.wa-sec{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.wa-chks{display:flex;flex-wrap:wrap;gap:6px 14px}
+.wa-chks label{display:flex;gap:6px;align-items:center;font-size:14px}
+.wa-seg{display:flex;flex-wrap:wrap;gap:6px}
+.wa-seg button{padding:8px 14px;border-radius:99px;background:var(--card);border:1.5px solid var(--line);font-weight:600;font-size:13px}
+.wa-seg button.on{border-color:var(--green);background:var(--green);color:#fff}
+.wa-total{margin-top:14px;padding:12px 14px;border-radius:12px;background:var(--green-50,#ecfdf3);font-size:14px}
+.wa-total small{display:block;color:var(--muted);margin-top:2px}
+.wa-hasil{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+.wa-hasil button{text-align:left;padding:8px 10px;border-radius:8px;background:var(--bg,#f6f7f9);font-size:14px}
+.wa-hasil small{color:var(--muted);margin-left:6px}
+.wa-dipilih{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.wa-pill{display:inline-flex;align-items:center;gap:4px;padding:4px 6px 4px 10px;border-radius:99px;background:var(--green-50,#ecfdf3);font-size:13px}
+.wa-pill button{width:20px;height:20px;border-radius:99px;font-size:15px;line-height:1}
+.wa-tools{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.wa-tulis{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));margin-bottom:12px}
+.wa-bubble{background:#dcf8c6;color:#111;border-radius:10px 10px 10px 2px;padding:10px 12px;font-size:14px;line-height:1.5;white-space:normal;word-break:break-word;min-height:60px;max-height:340px;overflow:auto;box-shadow:0 1px 1px rgba(0,0,0,.08)}
+.wa-bubble small{display:block;color:#555;margin-top:6px}
+.wa-act{white-space:nowrap}
+.wa-act .btn{margin:2px}
+.wa-off td{opacity:.6}
+.wa-cut{max-width:320px;max-height:3.2em;overflow:hidden;font-size:13px;white-space:pre-line}
+.wa-lbl{display:inline-block;padding:1px 8px;border-radius:99px;background:var(--bg,#f1f3f5);font-size:12px;margin:1px}
+.wa-gt input{width:18px;height:18px}
+.wa-glist{display:flex;flex-direction:column;gap:8px}
+.wa-g{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.wa-g>div{flex:1 1 180px}
+.wa-g small{display:block;color:var(--muted);font-size:12px}
+.wa-g label{display:flex;gap:6px;align-items:center;font-size:14px}
+.wa-g .wa-dis{opacity:.5}

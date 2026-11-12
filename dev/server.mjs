@@ -36,8 +36,21 @@ if (process.env.MOCK) {
     const u = String(url);
     if (u.includes("midtrans.com/snap")) { const b = JSON.parse(opt.body); return new Response(JSON.stringify({ token: "tok-" + b.transaction_details.order_id, redirect_url: `http://localhost:${PORT}/dev-pay.html?order=${b.transaction_details.order_id}&amount=${b.transaction_details.gross_amount}` }), { status: 201 }); }
     if (u.includes("midtrans.com/v2")) return new Response(JSON.stringify({ transaction_status: "pending" }));
+    if (u.includes("docs.google.com/spreadsheets")) {
+      if (u.includes("PRIVAT")) return new Response("<html>login</html>", { headers: { "content-type": "text/html" } });
+      const csv = 'judul,arab,terjemah,sumber,kategori,gambar\n"Hadits Harian","إِنَّمَا الأَعْمَالُ بِالنِّيَّاتِ","Sesungguhnya amal itu tergantung niatnya, {nama}.","HR. Bukhari no. 1",hadits,\n"Ayat Harian","وَأَقِيمُوا الصَّلَاةَ","Dan dirikanlah shalat, ""tunaikan"" zakat.","QS. Al-Baqarah: 43",ayat,https://contoh.id/a.png\n"Hadits Kedua","","Senyummu kepada saudaramu adalah sedekah.","HR. Tirmidzi no. 1956",hadits,\n';
+      return new Response(csv, { headers: { "content-type": "text/csv" } });
+    }
+    if (u.includes("api.fonnte.com/fetch-group")) return new Response(JSON.stringify({ status: true, detail: "update whatsapp group list success" }));
+    if (u.includes("api.fonnte.com/get-whatsapp-group")) return new Response(JSON.stringify({ status: true, data: [{ id: "120363000000000001@g.us", name: "Relawan WIZ Poso" }, { id: "120363000000000002@g.us", name: "Donatur Peduli Poso" }] }));
     if (u.includes("api.fonnte.com")) {
       const t = opt.body.get("target"), m = opt.body.get("message"), f = opt.body.get("url");
+      // Banyak target "nomor|nama" sekaligus: catat satu per satu, {name} diganti nama (meniru Fonnte)
+      if (t.includes(",") || t.includes("|")) {
+        if (f && process.env.FONNTE_TEKS) return new Response(JSON.stringify({ status: false, reason: "package not support attachment" }));
+        for (const x of t.split(",")) { const [num, nm = ""] = x.split("|"); const msg = m.replaceAll("{name}", nm); sent.push({ t: num, m: msg, url: f || null, delay: opt.body.get("delay") }); console.log(`[WA → ${num}] ${msg.split("\n")[0]}`); }
+        return new Response(JSON.stringify({ status: true, detail: "success! message in queue" }));
+      }
       // FONNTE_TEKS=1 meniru paket Fonnte yang belum mendukung lampiran
       if (f && process.env.FONNTE_TEKS) return new Response(JSON.stringify({ status: false, reason: "package not support attachment" }));
       sent.push({ t, m, url: f || null }); console.log(`[WA → ${t}]${f ? " [gambar]" : ""} ${m.split("\n")[0]}`); return new Response(JSON.stringify({ status: true }));
