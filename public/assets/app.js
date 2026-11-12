@@ -612,6 +612,15 @@ route(/^#\/(?:bayar|kuitansi)\/(\w+)$/, async (id) => {
         <a class="btn plain block" href="#/">Kembali ke beranda</a>`);
       return;
     }
+    if (d.status === "expired" && d.metode !== "gateway" && !d.ada_bukti) {
+      view(`<div class="statusbox"><span class="st failed">Kedaluwarsa</span><h2 style="margin:10px 0 4px">${rp(d.total)}</h2><p style="color:var(--muted);margin:0">Bukti transfer tidak diunggah dalam 24 jam.</p></div>
+        <div class="sec"><h2>Sudah terlanjur transfer?</h2></div>
+        <label class="upload wajib" for="bukti">${ic("upload", 24)}<br><b style="color:var(--ink)">Unggah bukti transfer</b><br>Donasi akan diperiksa kembali oleh admin<input type="file" id="bukti" accept="image/*"></label>
+        <a class="btn primary block" style="margin-top:12px" href="#/c/${d.campaign.slug}">Buat donasi baru</a>`);
+      $("#bukti").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; toast("Mengunggah bukti…");
+        try { await api(`public/donations/${id}/bukti`, { method: "POST", body: { gambar: await resizeImage(f, 1400) } }); toast("Bukti terkirim. Terima kasih!"); draw(await api("public/donations/" + id)); } catch (x) { toast(x.message); } };
+      return;
+    }
     if (d.status !== "pending") {
       view(`<div class="statusbox"><span class="st failed">${d.status === "expired" ? "Kedaluwarsa" : d.status === "cancelled" ? "Dibatalkan" : "Gagal"}</span><h2 style="margin:10px 0 4px">${rp(d.total)}</h2><p style="color:var(--muted);margin:0">Pembayaran untuk "${esc(d.campaign.judul)}" tidak selesai.</p></div>
         <a class="btn primary block" style="margin-top:12px" href="#/c/${d.campaign.slug}">Coba donasi lagi</a>`); return;
@@ -628,10 +637,10 @@ route(/^#\/(?:bayar|kuitansi)\/(\w+)$/, async (id) => {
     const manual = d.metode !== "gateway";
     view(`<div class="statusbox"><span class="st">${ic("clock", 16)} Menunggu pembayaran</span><h2 style="margin:10px 0 2px">${tot}</h2><p style="margin:0;color:var(--muted);font-size:13.5px">${esc(d.campaign.judul)} · No. ${esc(d.id)}</p></div>
       <div style="margin-top:12px">${body}</div>
-      ${manual ? `<div class="sec"><h2>Sudah transfer?</h2></div>
+      ${manual ? `<div class="sec"><h2>${d.ada_bukti ? "Bukti terkirim" : "Langkah terakhir: unggah bukti"}</h2></div>
         ${d.ada_bukti ? `<div class="info">${ic("check", 20)}<span>Bukti transfer sudah kami terima. Admin akan memverifikasi, lalu kuitansi dikirim ke WhatsApp Anda.</span></div>`
-        : `<label class="upload" for="bukti">${ic("upload", 24)}<br><b style="color:var(--ink)">Unggah bukti transfer</b><br>Foto atau tangkapan layar · mempercepat verifikasi<input type="file" id="bukti" accept="image/*"></label>`}
-        <div class="hint">Transfer dengan nominal tepat biasanya terverifikasi tanpa bukti. Kuitansi dikirim setelah dana kami terima.</div>` : ""}
+        : `<label class="upload wajib" for="bukti">${ic("upload", 24)}<br><b style="color:var(--ink)">Unggah bukti transfer</b><br>Foto atau tangkapan layar struk/mutasi<input type="file" id="bukti" accept="image/*"></label>
+        <div class="hint"><b>Donasi Anda baru tercatat setelah bukti diunggah.</b> Batas unggah 24 jam sejak donasi dibuat. Kuitansi dikirim ke WhatsApp setelah admin memverifikasi.</div>`}` : ""}
       <div class="info">${ic("shield", 20)}<span>Pastikan penerima atas nama <b>Wahdah Inspirasi Zakat</b>. WIZ tidak pernah meminta transfer ke rekening pribadi.</span></div>
       <button class="btn ghost block" style="margin-top:12px" id="cek">${ic("repeat", 18)} Cek status</button>`);
     $("#cek").onclick = async () => { const n = await api(`public/donations/${id}/check`, { method: "POST" }); if (n.status !== "pending") draw(n); else toast("Belum terkonfirmasi. Status diperiksa otomatis."); };

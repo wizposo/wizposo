@@ -82,3 +82,10 @@ og = await ogOf("/c/tidak-ada-program");
 ok(/WIZ Cabang .* – Zakat/.test(og.title) && og.img.endsWith("/assets/icon.png"), "program tidak ditemukan: pratinjau umum");
 og = await ogOf("/");
 ok(og.img === HOST + "/assets/icon.png", "halaman depan: gambar pratinjau alamat lengkap");
+
+// Layar putih: browser yang membuka ulang (If-None-Match) tetap mendapat halaman utuh
+for (const p of ["/", "/c/" + slug]) {
+  const res = await fetch(HOST + p, { headers: { "if-none-match": '"abc"', "if-modified-since": new Date().toUTCString() } });
+  const h = await res.text();
+  ok(res.status === 200 && /<script src="\/assets\/app\.js/.test(h) && /og:title/.test(h) && !res.headers.get("etag"), `buka ulang ${p}: halaman utuh (${h.length} byte), tanpa etag`);
+}

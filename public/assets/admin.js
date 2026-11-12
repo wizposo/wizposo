@@ -233,7 +233,7 @@ VIEWS.donasi = async () => {
   main(`<div class="ph"><h1>Donasi</h1><div class="acts"><a class="btn ghost sm" id="exp" href="#">${ic("download")} Ekspor Excel (CSV)</a>${can("catat") ? `<button class="btn primary sm" onclick="offlineForm()">${ic("plus")} Catat donasi offline</button>` : ""}</div></div>
     <div class="fbar">
       <div class="inp grow"><input id="f_q" placeholder="Cari nama, WA, no. transaksi, kode kotak/pundi"></div>
-      <div class="inp"><select id="f_status"><option value="">Semua status</option>${Object.entries(STATUS).map(([k, l]) => `<option value="${k}" ${f.status === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+      <div class="inp"><select id="f_status"><option value="">Semua status</option>${Object.entries({ ...STATUS, tanpa_bukti: "Belum kirim bukti (transfer/QRIS)" }).map(([k, l]) => `<option value="${k}" ${f.status === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
       <div class="inp"><select id="f_jenis"><option value="">Semua dana</option><option value="zakat">Zakat</option><option value="infak">Infak</option><option value="wakaf">Wakaf</option><option value="fidyah">Fidyah</option></select></div>
       <div class="inp"><select id="f_campaign"><option value="">Semua program</option>${CAMPS.map((c) => `<option value="${c.id}">${esc(c.judul)}</option>`).join("")}</select></div>
       <div class="inp"><select id="f_metode"><option value="">Semua metode</option>${Object.entries(METODE).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></div>
@@ -243,7 +243,9 @@ VIEWS.donasi = async () => {
   const load = async () => {
     const r = await api("admin/donations?" + qstr());
     $("#exp").href = "/api/admin/export/donations?" + qstr();
-    $("#sum").innerHTML = `<b>${r.total}</b> transaksi · lunas <b>${rp(r.paid)}</b>`;
+    $("#sum").innerHTML = `<b>${r.total}</b> transaksi · lunas <b>${rp(r.paid)}</b>` +
+      (r.tanpa_bukti && f.status !== "tanpa_bukti" ? ` · <a href="#" id="lihat_tb">${r.tanpa_bukti} transfer belum kirim bukti (disembunyikan)</a>` : "");
+    $("#lihat_tb")?.addEventListener("click", (e) => { e.preventDefault(); f.status = "tanpa_bukti"; $("#f_status").value = "tanpa_bukti"; f.page = 1; load(); });
     $("#tbl").innerHTML = `<table class="t"><thead><tr><th>Waktu</th><th>Donatur</th><th>Program</th><th>Metode</th><th class="num">Total</th><th>Status</th><th></th></tr></thead><tbody>
       ${r.rows.map((d) => `<tr class="click" data-id="${d.id}"><td>${tgl(d.paid_at || d.created_at)}<small>${esc(d.id)}</small></td>
         <td>${esc(d.anonim ? "Hamba Allah" : d.nama || "-")}${d.anonim && d.nama ? ` <small>(${esc(d.nama)})</small>` : ""}<small>${d.wa ? "+" + d.wa : ""}${d.fundraiser ? " · via " + esc(d.fundraiser) : ""}</small></td>

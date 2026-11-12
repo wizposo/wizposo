@@ -94,7 +94,7 @@ http.createServer(async (req, res) => {
     res.statusCode = 302; res.setHeader("location", `/__gas/echo?t=${t}`); return res.end();
   }
   // Khusus uji: jalankan SQL langsung (tidak ada di Cloudflare)
-  if (url.pathname === "/__sql" && req.method === "POST") { const chunks = []; for await (const c of req) chunks.push(c); const { sql, args = [] } = JSON.parse(Buffer.concat(chunks).toString()); res.setHeader("content-type", "application/json"); try { const st = db.prepare(sql); return res.end(JSON.stringify(/^\s*select/i.test(sql) ? st.all(...args) : st.run(...args))); } catch (e) { res.statusCode = 400; return res.end(JSON.stringify({ error: e.message })); } }
+  if (url.pathname === "/__sql" && req.method === "POST") { const chunks = []; for await (const c of req) chunks.push(c); const q = JSON.parse(Buffer.concat(chunks).toString()); db.prepare(q.sql).run(...(q.args || [])); return res.end("ok"); }
   if (url.pathname === "/__sent") { res.setHeader("content-type", "application/json"); return res.end(JSON.stringify(sent)); }
   if (url.pathname.startsWith("/api/")) {
     const chunks = []; for await (const c of req) chunks.push(c);
@@ -107,7 +107,7 @@ http.createServer(async (req, res) => {
   }
   // Halaman bagikan dengan tag pratinjau (meniru Pages Functions functions/index.js, c/, program/, berita/)
   if (req.method === "GET" && (url.pathname === "/" || /^\/(c|program|berita)\/[\w-]+\/?$/.test(url.pathname))) {
-    const ASSETS = { fetch: async () => new Response(fs.readFileSync(path.join(ROOT, "public", "index.html")), { headers: { "content-type": "text/html", "x-uji": "1" } }) };
+    const ASSETS = { fetch: async (rq) => rq?.headers?.get?.("if-none-match") ? new Response(null, { status: 304 }) : new Response(fs.readFileSync(path.join(ROOT, "public", "index.html")), { headers: { "content-type": "text/html", etag: "\"abc\"" } }) };
     const r = await ogPage(new Request(url, { headers: req.headers }), { ...env, ASSETS });
     res.statusCode = r.status; r.headers.forEach((v, k) => res.setHeader(k, v)); return res.end(await r.text());
   }

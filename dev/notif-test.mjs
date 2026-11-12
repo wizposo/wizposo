@@ -27,18 +27,44 @@ ok(r.s === 201 || r.s === 200, "donasi transfer lewat tautan afiliasi dibuat");
 const did = r.data.id;
 const riwayat = async () => (await call("GET", "admin/wa/riwayat", null, adm)).data.rows;
 let rows = await riwayat();
-const admBaru = rows.find((x) => x.judul === "Info admin: donasi baru" && x.pesan.includes(did));
-ok(admBaru && admBaru.pesan.includes(`/admin#donasi?id=${did}`), "admin menerima WA donasi baru berisi tautan tandai lunas");
-ok(admBaru && /kode unik \d+/.test(admBaru.pesan) && admBaru.pesan.includes("Rahasia Namanya"), "pesan admin memuat total, kode unik, dan afiliator");
-const frBaru = rows.find((x) => x.judul === "Info afiliator: donasi baru" && x.wa === "6281355550001");
-ok(frBaru && frBaru.pesan.includes(`kode ${kode}`) && frBaru.status === "terkirim", "afiliator menerima WA saat ada donasi lewat tautannya");
+ok(!rows.some((x) => x.judul === "Info admin: bukti transfer" && x.pesan.includes(did)), "sebelum bukti: admin belum diberi kabar");
+ok(!rows.some((x) => x.judul === "Info afiliator: donasi baru" && x.wa === "6281355550001"), "sebelum bukti: afiliator belum diberi kabar");
+const ins = rows.find((x) => x.judul === "Instruksi transfer donatur" && x.wa === "6281355550002");
+ok(ins && ins.pesan.includes(`/#/bayar/${did}`) && /unggah bukti transfer/i.test(ins.pesan) && /Rp100\.\d{3}/.test(ins.pesan), "donatur menerima instruksi transfer + tautan unggah bukti");
+let dl = (await call("GET", "admin/donations", null, adm)).data;
+ok(!dl.rows.some((x) => x.id === did) && dl.tanpa_bukti >= 1, "donasi tanpa bukti tidak tampil di daftar admin");
+dl = (await call("GET", "admin/donations?status=tanpa_bukti", null, adm)).data;
+ok(dl.rows.some((x) => x.id === did), "filter 'Belum kirim bukti' menampilkannya");
+const totalDid = (await call("GET", "public/donations/" + did)).data.total;
+dl = (await call("GET", "admin/donations?q=" + totalDid, null, adm)).data;
+ok(dl.rows.some((x) => x.id === did), "dicari dengan nominal transfer juga ketemu");
 
 // Bukti transfer
 const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 r = await call("POST", `public/donations/${did}/bukti`, { gambar: png });
 ok(r.s === 200, "bukti transfer diunggah");
 rows = await riwayat();
-ok(rows.some((x) => x.judul === "Info admin: bukti transfer" && x.pesan.includes(`/admin#donasi?id=${did}`)), "WA bukti transfer ke admin berisi tautan langsung");
+const admBaru = rows.find((x) => x.judul === "Info admin: bukti transfer" && x.pesan.includes(did));
+ok(admBaru && admBaru.pesan.includes(`/admin#donasi?id=${did}`), "setelah bukti: admin menerima WA berisi tautan tandai lunas");
+ok(admBaru && /kode unik \d+/.test(admBaru.pesan) && admBaru.pesan.includes("Rahasia Namanya"), "pesan admin memuat total, kode unik, dan afiliator");
+const frBaru = rows.find((x) => x.judul === "Info afiliator: donasi baru" && x.wa === "6281355550001");
+ok(frBaru && frBaru.pesan.includes(`kode ${kode}`) && frBaru.status === "terkirim", "setelah bukti: afiliator menerima kabar donasi lewat tautannya");
+dl = (await call("GET", "admin/donations", null, adm)).data;
+ok(dl.rows.some((x) => x.id === did && x.status === "pending"), "setelah bukti: donasi tampil di daftar admin");
+const nAdm = rows.filter((x) => x.judul === "Info admin: bukti transfer" && x.pesan.includes(did)).length;
+await call("POST", `public/donations/${did}/bukti`, { gambar: png });
+ok((await riwayat()).filter((x) => x.judul === "Info admin: bukti transfer" && x.pesan.includes(did)).length === nAdm, "unggah ulang bukti tidak mengirim WA ganda");
+
+// Kedaluwarsa 24 jam & bukti terlambat
+r = await call("POST", "public/donations", { campaign: camp.slug, nominal: 25000, nama: "Donatur Lupa", wa: "081355550003", metode: "transfer" });
+const lupa = r.data.id;
+await fetch(HOST + "/__sql", { method: "POST", body: JSON.stringify({ sql: "UPDATE donations SET created_at=datetime('now','-25 hours') WHERE id=?", args: [lupa] }) });
+await call("GET", "admin/donations", null, adm);
+let pd = (await call("GET", "public/donations/" + lupa)).data;
+ok(pd.status === "expired", "tanpa bukti 24 jam: donasi kedaluwarsa otomatis");
+r = await call("POST", `public/donations/${lupa}/bukti`, { gambar: png });
+pd = (await call("GET", "public/donations/" + lupa)).data;
+ok(r.s === 200 && pd.status === "pending" && pd.ada_bukti, "bukti terlambat: donasi hidup lagi untuk diperiksa admin");
 
 // Admin menandai lunas → afiliator dapat kabar lunas + komisi
 r = await call("POST", `admin/donations/${did}/status`, { status: "paid" }, adm);
