@@ -326,6 +326,7 @@ VIEWS.program = async () => {
       ${c.target ? `<div class="bar" style="margin:6px 0 0;height:5px;max-width:260px"><i style="width:${pct}%"></i></div>` : ""}</td><td>${esc(c.jenis_dana)}</td><td class="num">${rp(c.terkumpul)}</td><td class="num">${c.target ? rp(c.target) : "-"}</td>
       <td>${c.batas ? tglD(c.batas + " 00:00:00") : "-"}</td><td><span class="tag ${c.status === "aktif" ? "st-paid" : "st-pending"}">${esc(c.status)}</span></td></tr>`; }).join("")}</tbody></table></div>`);
   $$("tr[data-id]").forEach((tr) => tr.onclick = () => campForm(CAMPS.find((c) => c.id === +tr.dataset.id)));
+  ogSiapkan("program", CAMPS);
 };
 // Galeri gambar: tambah banyak sekaligus (tanpa batas), pilih gambar utama, atur urutan, hapus
 function galeriState(o) {
@@ -366,6 +367,26 @@ function galeriEditor(hostSel, st) {
     };
   };
   draw();
+}
+
+// Gambar pratinjau tautan WhatsApp/Facebook: JPEG 1200×630 dari gambar utama, dibuat otomatis di latar belakang
+async function buatOg(coverId) {
+  const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = `/api/media/${coverId}`; });
+  const W = 1200, H = 630, c = document.createElement("canvas"); c.width = W; c.height = H;
+  const s = Math.max(W / img.width, H / img.height), w = img.width * s, h = img.height * s;
+  const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, W, H); g.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+  let q = 0.78, out = c.toDataURL("image/jpeg", q);
+  while (out.length > 380000 && q > 0.45) { q -= 0.08; out = c.toDataURL("image/jpeg", q); }
+  return out;
+}
+let OG_JALAN = false;
+async function ogSiapkan(jenis, rows) {
+  if (OG_JALAN) return; OG_JALAN = true;
+  try {
+    for (const r of rows.filter((x) => x.cover_id && x.og_src !== x.cover_id)) {
+      try { await api("admin/og", { method: "POST", body: { jenis, id: r.id, src: r.cover_id, gambar: await buatOg(r.cover_id) } }); r.og_src = r.cover_id; } catch {}
+    }
+  } finally { OG_JALAN = false; }
 }
 
 async function campForm(c = {}) {
@@ -1018,11 +1039,12 @@ VIEWS.berita = async () => {
   const rows = await api("admin/articles");
   main(`<div class="ph"><h1>Dokumentasi penyaluran</h1><div class="acts"><button class="btn primary sm" onclick="artForm()">${ic("plus")} Tulis dokumentasi</button></div></div>
     <p class="hint" style="margin-top:-6px">Laporan penyaluran dengan teks, foto, dan video. Tampil di halaman program terkait dan di menu Berita aplikasi donatur. Opsional, isi kapan saja.</p>
-    <div class="tw"><table class="t"><thead><tr><th>Judul</th><th>Program</th><th>Tanggal</th><th class="num">Penerima</th><th class="num">Tersalur</th><th>Status</th></tr></thead><tbody>
+    <div class="tw"><table class="t"><thead><tr><th>Judul</th><th>Program</th><th>Tanggal</th><th>Status</th></tr></thead><tbody>
     ${rows.map((a) => `<tr class="click" data-id="${a.id}"><td><b>${esc(a.judul)}</b><small>${esc(a.lokasi || "")}</small></td><td>${esc(a.program || "Umum")}</td><td>${a.tanggal ? tglD(a.tanggal + " 00:00:00") : tglD(a.created_at)}</td>
-      <td class="num">${a.penerima || "-"}</td><td class="num">${a.tersalur ? rp(a.tersalur) : "-"}</td><td><span class="tag ${a.status === "terbit" ? "st-paid" : "st-pending"}">${a.status === "terbit" ? "Terbit" : "Draf"}</span></td></tr>`).join("")
-    || `<tr><td colspan="6" class="hint" style="text-align:center;padding:30px">Belum ada dokumentasi. Foto dan cerita penyaluran membuat donatur yakin dan kembali berdonasi.</td></tr>`}</tbody></table></div>`);
+      <td><span class="tag ${a.status === "terbit" ? "st-paid" : "st-pending"}">${a.status === "terbit" ? "Terbit" : "Draf"}</span></td></tr>`).join("")
+    || `<tr><td colspan="4" class="hint" style="text-align:center;padding:30px">Belum ada dokumentasi. Foto dan cerita penyaluran membuat donatur yakin dan kembali berdonasi.</td></tr>`}</tbody></table></div>`);
   $$("tr[data-id]").forEach((tr) => tr.onclick = () => artForm(+tr.dataset.id));
+  ogSiapkan("berita", rows);
 };
 const BLK = { p: "Paragraf", h: "Subjudul", img: "Gambar", video: "Video", quote: "Kutipan / testimoni" };
 async function artForm(id) {

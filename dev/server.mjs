@@ -4,7 +4,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { handle } from "../lib/app.js";
+import { handle, ogPage } from "../lib/app.js";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const db = new DatabaseSync(process.env.DB_FILE || ":memory:");
@@ -104,6 +104,12 @@ http.createServer(async (req, res) => {
     const r = await handle(request, env, { waitUntil: (p) => waits.push(p) });
     res.statusCode = r.status; r.headers.forEach((v, k) => res.setHeader(k, v));
     res.end(Buffer.from(await r.arrayBuffer())); await Promise.allSettled(waits); return;
+  }
+  // Halaman bagikan dengan tag pratinjau (meniru Pages Functions functions/index.js, c/, program/, berita/)
+  if (req.method === "GET" && (url.pathname === "/" || /^\/(c|program|berita)\/[\w-]+\/?$/.test(url.pathname))) {
+    const ASSETS = { fetch: async () => new Response(fs.readFileSync(path.join(ROOT, "public", "index.html")), { headers: { "content-type": "text/html", "x-uji": "1" } }) };
+    const r = await ogPage(new Request(url, { headers: req.headers }), { ...env, ASSETS });
+    res.statusCode = r.status; r.headers.forEach((v, k) => res.setHeader(k, v)); return res.end(await r.text());
   }
   let file = path.join(ROOT, "public", decodeURIComponent(url.pathname));
   if (url.pathname.endsWith("/")) file = path.join(file, "index.html");

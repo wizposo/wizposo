@@ -59,3 +59,26 @@ vids.forEach(([url, kind, host], i) => ok(vb[i].kind === kind && (!host || vb[i]
 ok(vb[1].tegak === true && vb[0].tegak === false, "YouTube Shorts ditampilkan tegak");
 ok(vb[6].rasio === "9/16" && vb[2].rasio === "16/9", "TikTok tegak, Drive mendatar");
 ok(vb[2].src === "https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQr/preview", "Drive memakai pemutar /preview");
+
+// Tautan bagikan dengan pratinjau gambar (Open Graph)
+const ogOf = async (p) => { const h = await (await fetch(HOST + p, { headers: { "user-agent": "WhatsApp/2.23" } })).text();
+  const g = (k) => (new RegExp(`<meta property="${k}" content="([^"]*)"`).exec(h) || [])[1] || ""; return { h, title: g("og:title"), img: g("og:image"), desc: g("og:description"), url: g("og:url") }; };
+let og = await ogOf("/c/" + slug);
+ok(/^Program Galeri Uji · WIZ Cabang/.test(og.title), "tautan program: judul pratinjau = judul program");
+ok(og.img.startsWith("http://localhost:8788/api/media/"), "tautan program: gambar pratinjau berupa alamat lengkap");
+ok(og.url === HOST + "/c/" + slug, "og:url menunjuk tautan bagikan");
+ok(og.h.includes(`#/c/${slug}`) && og.h.includes("history.replaceState"), "pengunjung diarahkan ke halaman program di aplikasi");
+ok((og.h.match(/<title>/g) || []).length === 1 && (og.h.match(/property="og:title"/g) || []).length === 1, "tag judul tidak ganda");
+r = await call("POST", "admin/og", { jenis: "program", id: cid, gambar: png.replace("image/png", "image/jpeg"), src: ids[0] }, adm);
+ok(r.s === 200, "gambar pratinjau JPEG disimpan");
+og = await ogOf("/c/" + slug + "?ref=0001");
+ok(og.img.endsWith(`/api/media/${r.data.id}`) && og.h.includes('og:image:width" content="1200"'), "pratinjau memakai JPEG 1200×630 bila tersedia");
+r = await call("POST", "admin/og", { jenis: "program", id: cid, gambar: png }, adm);
+ok(r.s === 400, "gambar pratinjau selain JPEG ditolak");
+const art1 = (await call("GET", "public/articles?limit=20")).data.find((x) => x.slug.startsWith("laporan-galeri-uji"));
+og = await ogOf("/berita/" + art1.slug);
+ok(/^Laporan Galeri Uji/.test(og.title) && og.img.includes("/api/media/") && og.h.includes(`#/berita/${art1.slug}`), "tautan berita: judul, gambar, dan arah halaman benar");
+og = await ogOf("/c/tidak-ada-program");
+ok(/WIZ Cabang .* – Zakat/.test(og.title) && og.img.endsWith("/assets/icon.png"), "program tidak ditemukan: pratinjau umum");
+og = await ogOf("/");
+ok(og.img === HOST + "/assets/icon.png", "halaman depan: gambar pratinjau alamat lengkap");

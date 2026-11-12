@@ -97,6 +97,7 @@ let CFG = { cabang: "", rekening: [] }, CAMPS = [];
 const profile = store.get("profil", { sapaan: "Bapak", nama: "", wa: "" });
 const pundiSaya = store.get("pundi", { kode: "", status: "" });
 const params = new URLSearchParams(location.search);
+{ const pm = /^\/(c|program|berita)\/([\w-]+)\/?$/.exec(location.pathname); if (pm && !location.hash) history.replaceState(null, "", "/" + location.search + (pm[1] === "berita" ? "#/berita/" : "#/c/") + pm[2]); }
 if (params.get("ref")) store.set("ref", { kode: params.get("ref").toUpperCase(), exp: Date.now() + 30 * 864e5 });
 const refNow = () => { const r = store.get("ref", null); return r && r.exp > Date.now() ? r.kode : ""; };
 let kotakNow = store.get("kotak", null); if (kotakNow && kotakNow.exp < Date.now()) kotakNow = null;
@@ -171,7 +172,7 @@ function drawJar(cv, fill) {
   x.beginPath(); x.roundRect(40, 78, 44, 30, 6); x.fill(); x.fillStyle = "#046B5C"; x.font = "800 15px Plus Jakarta Sans, sans-serif"; x.textAlign = "center"; x.fillText("WIZ", 62, 99);
   x.restore();
 }
-function shareText(c) { const r = refNow(); return `${c.judul}\n${c.ringkas || ""}\n\nMari ikut berbagi lewat WIZ Cabang ${CFG.cabang}:\n${origin}/${r ? "?ref=" + r : ""}#/c/${c.slug}`; }
+function shareText(c) { const r = refNow(); return `${c.judul}\n${c.ringkas || ""}\n\nMari ikut berbagi lewat WIZ Cabang ${CFG.cabang}:\n${origin}/c/${c.slug}${r ? "?ref=" + r : ""}`; }
 
 /* ---------- Beranda ---------- */
 route(/^#\/?$/, async () => {
@@ -432,7 +433,7 @@ route(/^#\/mitra$/, async () => {
   header("Portal fundraiser"); nav("#/akun");
   let me = null; try { me = await api("fr/me"); } catch {}
   if (!me) return mitraAuth("daftar");
-  const link = (c) => `${origin}/?ref=${me.me.kode}#/c/${c.slug}`;
+  const link = (c) => `${origin}/c/${c.slug}?ref=${me.me.kode}`;
   view(`<section class="hero" style="padding:18px"><small>Fundraiser · kode ${esc(me.me.kode)}</small><h1 style="font-size:20px">Assalamu'alaikum, ${esc(me.me.nama.split(" ")[0])}</h1>
       <p style="margin:0">${me.me.status === "aktif" ? "Setiap donasi lewat tautan Anda tercatat otomatis dan Anda mendapat notifikasi WhatsApp." : "Akun Anda menunggu persetujuan admin."}</p></section>
     <div class="tiles" style="margin-top:12px"><div class="s"><small>Total terkumpul</small><b>${rpk(me.stat.total)}</b></div><div class="s"><small>Bulan ini</small><b>${rpk(me.stat.bulan_ini)}</b></div>
@@ -577,7 +578,7 @@ route(/^#\/berita\/([\w-]+)$/, async (slug) => {
     ${a.lain.length ? `<div class="sec"><h2>Laporan lainnya</h2><a href="#/berita">Lihat semua</a></div>${a.lain.map(artRow).join("")}` : ""}
     <div style="height:80px"></div>`);
   const cta = document.createElement("div"); cta.className = "cta";
-  const share = `${a.judul}\n\nLaporan penyaluran WIZ Cabang ${CFG.cabang}:\n${origin}/${refNow() ? "?ref=" + refNow() : ""}#/berita/${a.slug}`;
+  const share = `${a.judul}\n\nLaporan penyaluran WIZ Cabang ${CFG.cabang}:\n${origin}/berita/${a.slug}${refNow() ? "?ref=" + refNow() : ""}`;
   cta.innerHTML = `<a class="btn ghost sh" aria-label="Bagikan" href="${waLink("", share)}" target="_blank" rel="noopener">${ic("share", 20)}</a><button class="btn primary" onclick="openDonate('${esc(a.program_slug || "infak-terbaik")}')">${a.program ? "Bantu program ini" : "Donasi sekarang"}</button>`;
   document.body.appendChild(cta); $("#nav").hidden = true;
 });
