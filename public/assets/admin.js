@@ -805,6 +805,9 @@ async function waBerhenti(d, qs) {
 let UPAH_TAB = "diajukan";
 const TARIK_TAG = { diajukan: ["Menunggu", "st-pending"], disetujui: ["Dibayar", "st-paid"], ditolak: ["Ditolak", "st-failed"] };
 VIEWS.upah = async () => {
+  // Tautan dari WA admin: #upah?tarik=afiliator-12 atau #upah?tarik=petugas-5
+  const buka = /^(afiliator|petugas)-(\d+)$/.exec(new URLSearchParams(location.hash.split("?")[1] || "").get("tarik") || "");
+  if (buka) { UPAH_TAB = "semua"; history.replaceState(null, "", "#upah"); }
   const [d, tarik] = await Promise.all([api("admin/upah"), api("admin/penarikan?status=" + UPAH_TAB)]);
   const saldoAf = d.afiliator.reduce((a, b) => a + b.tersedia, 0), saldoPet = d.petugas.reduce((a, b) => a + b.tersedia, 0);
   const menunggu = d.afiliator.reduce((a, b) => a + b.diajukan, 0) + d.petugas.reduce((a, b) => a + b.diajukan, 0);
@@ -834,6 +837,22 @@ VIEWS.upah = async () => {
     $("#ok_s").onclick = (e) => busy(e.target, async () => { await api(`admin/penarikan/${b.dataset.tipe}/${b.dataset.ok}/setuju`, { method: "POST", body: { catatan: val("n_cat") } }); closeModal(); toast("Penarikan disetujui dan dicatat"); VIEWS.upah(); }); });
   $$("[data-no]").forEach((b) => b.onclick = () => { modal("Tolak penarikan", `<p>Saldo akan kembali tersedia. Jelaskan alasannya agar penerima bisa memperbaiki pengajuan.</p>${field("n_alasan", "Alasan penolakan", "", { ph: "Contoh: nomor rekening tidak jelas" })}`, `<button class="btn danger sm" id="no_s">Tolak</button>`);
     $("#no_s").onclick = (e) => busy(e.target, async () => { await api(`admin/penarikan/${b.dataset.tipe}/${b.dataset.no}/tolak`, { method: "POST", body: { alasan: val("n_alasan") } }); closeModal(); toast("Penarikan ditolak"); VIEWS.upah(); }); });
+  if (buka) {
+    const t = tarik.find((x) => x.tipe === buka[1] && String(x.id) === buka[2]);
+    if (!t) return toast("Permintaan penarikan tidak ditemukan.");
+    const tr = $(`[data-ok="${t.id}"][data-tipe="${t.tipe}"]`)?.closest("tr") || null;
+    if (t.status !== "diajukan") return toast(`Permintaan ini sudah ${TARIK_TAG[t.status]?.[0].toLowerCase() || t.status}${t.diproses_oleh ? " oleh " + t.diproses_oleh : ""}.`);
+    tr?.scrollIntoView({ block: "center" });
+    const peran = t.tipe === "petugas" ? ROLES[t.kode] || t.kode : "Afiliator · kode " + t.kode;
+    modal("Permintaan penarikan", `<div class="receipt" style="box-shadow:none;border:1px solid var(--line)">
+        <div class="rr"><span>Penerima</span><b>${esc(t.nama)}</b></div><div class="rr"><span>Peran</span><b>${esc(peran)}</b></div>
+        <div class="rr"><span>WhatsApp</span><b class="mono">+${esc(t.wa || "-")}</b></div><div class="rr"><span>Nominal</span><b>${rp(t.nominal)}</b></div>
+        <div class="rr"><span>Rekening tujuan</span><b>${esc(t.rekening)}</b></div><div class="rr"><span>Diajukan</span><b>${tglD(t.created_at)}</b></div></div>
+      <p class="hint">Transfer dana ke rekening di atas terlebih dahulu, lalu tekan Setujui. Penerima akan dikabari lewat WhatsApp.</p>`,
+      `<button class="btn ghost sm" id="lk_no">Tolak</button><button class="btn primary sm" id="lk_ok">Setujui</button>`);
+    $("#lk_ok").onclick = () => { closeModal(); $(`[data-ok="${t.id}"][data-tipe="${t.tipe}"]`).click(); };
+    $("#lk_no").onclick = () => { closeModal(); $(`[data-no="${t.id}"][data-tipe="${t.tipe}"]`).click(); };
+  }
 };
 
 /* ---------- Pundi & kotak ---------- */

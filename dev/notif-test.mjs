@@ -71,3 +71,23 @@ ok(rows.some((x) => x.judul === "Info admin: slip petugas" && /dibatalkan oleh Z
 const n0 = rows.filter((x) => x.judul === "Info admin: slip petugas").length;
 await call("POST", "field/slips", { nama: "Dicatat Admin", rincian: [{ k: "infaq", nominal: 5000 }] }, adm);
 ok((await riwayat()).filter((x) => x.judul === "Info admin: slip petugas").length === n0, "slip yang dicatat admin sendiri tidak memicu info");
+
+// Pengajuan penarikan → admin menerima tautan langsung ke persetujuan
+const s0 = (await call("GET", "admin/settings", null, adm)).data;
+await call("PUT", "admin/settings", { ...s0, tarik_min: 1000, upah_zisko_persen: 10 }, adm);
+const frc = (await call("POST", "fr/login", { wa: "081355550001", pin: "123456" })).sc;
+r = await call("POST", "fr/tarik", { nominal: 1000, rekening: "BSI 7150000001 a.n. Rahasia" }, frc);
+ok(r.s === 201, "afiliator mengajukan penarikan");
+const tidF = r.data.id;
+rows = await riwayat();
+const pa = rows.find((x) => x.judul === "Info admin: penarikan" && x.pesan.includes(`/admin#upah?tarik=afiliator-${tidF}`));
+ok(pa && /Permintaan tarik saldo afiliator/.test(pa.pesan) && /Rp1\.000/.test(pa.pesan) && /Sisa saldo/.test(pa.pesan), "admin menerima WA penarikan afiliator berisi tautan persetujuan");
+// ZISKO dengan upah (pakai akun dari field-test yang punya slip infak)
+const zk = zis;
+await call("POST", "field/slips", { nama: "Toko Upah", rincian: [{ k: "infaq", nominal: 50000 }], cara: "transfer" }, zk);
+r = await call("POST", "field/tarik", { nominal: 1000, rekening: "BRI 0001 a.n. Ahmad" }, zk);
+ok(r.s === 201, "ZISKO mengajukan tarik upah" + (r.s === 201 ? "" : " → " + JSON.stringify(r.data)));
+rows = await riwayat();
+ok(rows.some((x) => x.judul === "Info admin: penarikan" && x.pesan.includes(`/admin#upah?tarik=petugas-${r.data.id}`) && /tarik upah ZISKO/.test(x.pesan)), "admin menerima WA penarikan ZISKO berisi tautan persetujuan");
+await call("PUT", "admin/settings", { ...s0 }, adm);
+console.log("TARIK_ID " + tidF);
