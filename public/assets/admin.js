@@ -228,7 +228,8 @@ function short(v) { return v >= 1e6 ? (v / 1e6).toLocaleString("id-ID", { maximu
 /* ---------- Donasi ---------- */
 VIEWS.donasi = async () => {
   const qs = new URLSearchParams(location.hash.split("?")[1] || "");
-  const f = { status: qs.get("status") || "", jenis: "", campaign: "", metode: "", dari: "", sampai: "", q: "", page: 1 };
+  const bukaId = (qs.get("id") || "").replace(/[^\w]/g, "");
+  const f = { status: qs.get("status") || "", jenis: "", campaign: "", metode: "", dari: "", sampai: "", q: bukaId, page: 1 };
   main(`<div class="ph"><h1>Donasi</h1><div class="acts"><a class="btn ghost sm" id="exp" href="#">${ic("download")} Ekspor Excel (CSV)</a>${can("catat") ? `<button class="btn primary sm" onclick="offlineForm()">${ic("plus")} Catat donasi offline</button>` : ""}</div></div>
     <div class="fbar">
       <div class="inp grow"><input id="f_q" placeholder="Cari nama, WA, no. transaksi, kode kotak/pundi"></div>
@@ -258,7 +259,9 @@ VIEWS.donasi = async () => {
   };
   let t; $("#f_q").oninput = () => { clearTimeout(t); t = setTimeout(() => { f.q = val("f_q"); f.page = 1; load(); }, 350); };
   ["status", "jenis", "campaign", "metode", "dari", "sampai"].forEach((k) => $("#f_" + k).onchange = () => { f[k] = $("#f_" + k).value; f.page = 1; load(); });
+  if (bukaId) $("#f_q").value = bukaId;
   await load();
+  if (bukaId) { $(`tr[data-id="${bukaId}"]`)?.click(); history.replaceState(null, "", "#donasi"); }
   poll = setInterval(() => { if (!$("#modalBg").hidden) return; load().catch(() => {}); }, 20000);
 };
 async function setStatus(id, status, after) {
