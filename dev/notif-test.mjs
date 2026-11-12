@@ -52,3 +52,22 @@ ok(rows.some((x) => x.judul === "Info admin: lunas" && x.pesan.includes(`/admin#
 ok(rows.some((x) => x.judul === "Kuitansi donatur" && x.wa === "6281355550002"), "kuitansi donatur tercatat di riwayat");
 const d = (await call("GET", `admin/donations?q=${did}`, null, adm)).data;
 ok(JSON.stringify(d).includes("Rahasia Namanya"), "donasi tercatat atas nama afiliator");
+
+// ZISKO mencatat slip → admin menerima info berisi tautan slip
+r = await call("POST", "admin/admins", { nama: "Zisko Notif", role: "zisko", wa: "085200007799", password: "123456", wilayah: "Poso" }, adm);
+const zis = (await call("POST", "admin/login", { email: "085200007799", password: "123456" })).sc;
+ok(!!zis, "ZISKO masuk");
+r = await call("POST", "field/slips", { nama: "Warung Berkah", wa: "081355550077", rincian: [{ k: "infaq", nominal: 120000 }, { k: "zakat", nominal: 30000 }], cara: "tunai" }, zis);
+ok(r.s === 201, "ZISKO mencatat slip donasi langsung");
+const noSlip = r.data.no;
+rows = await riwayat();
+const info = rows.find((x) => x.judul === "Info admin: slip petugas" && x.pesan.includes(`Slip ${noSlip}`));
+ok(info && /Setoran baru dari ZISKO Zisko Notif/.test(info.pesan), "admin menerima info setoran dari ZISKO");
+ok(info && /Total: Rp150\.000/.test(info.pesan) && /masih dipegang Zisko Notif/.test(info.pesan) && info.pesan.includes(`/admin#slip?no=${noSlip}`), "info memuat rincian, total, posisi uang, dan tautan slip");
+r = await call("POST", `field/slips/${noSlip}/batal`, { alasan: "salah nominal" }, zis);
+ok(r.s === 200, "ZISKO membatalkan slipnya sendiri");
+rows = await riwayat();
+ok(rows.some((x) => x.judul === "Info admin: slip petugas" && /dibatalkan oleh Zisko Notif/.test(x.pesan) && /salah nominal/.test(x.pesan)), "admin menerima info pembatalan slip");
+const n0 = rows.filter((x) => x.judul === "Info admin: slip petugas").length;
+await call("POST", "field/slips", { nama: "Dicatat Admin", rincian: [{ k: "infaq", nominal: 5000 }] }, adm);
+ok((await riwayat()).filter((x) => x.judul === "Info admin: slip petugas").length === n0, "slip yang dicatat admin sendiri tidak memicu info");
