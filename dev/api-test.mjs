@@ -33,8 +33,10 @@ const sent = await (await fetch("http://localhost:8788/__sent")).json(); ok(sent
 // Donasi transfer manual dengan kode unik
 r = await call("POST", "public/donations", { campaign: "zakat-maal", nominal: 500000, nama: "Siti", wa: "081500000004", metode: "transfer" });
 ok(r.data.kode_unik > 0 && r.data.total === 500000 + r.data.kode_unik && r.data.rekening.length, `transfer: kode unik ${r.data.kode_unik}, total ${r.data.total}`); const tid = r.data.id;
-r = await call("POST", "public/donations", { campaign: "zakat-maal", nominal: 5000, metode: "transfer" }); ok(r.s === 400, "nominal di bawah minimum ditolak: " + r.data.error);
-r = await call("POST", "public/donations", { campaign: "zakat-maal", nominal: 50000, metode: "qris" }); ok(r.s === 400, "QRIS belum diatur ditolak");
+r = await call("POST", "public/donations", { campaign: "zakat-maal", nominal: 50000, metode: "transfer" }); ok(r.s === 400 && /WhatsApp wajib/.test(r.data.error), "donasi online tanpa nomor WA ditolak");
+r = await call("POST", "public/donations", { campaign: "zakat-maal", nominal: 50000, metode: "transfer", wa: "0211234567" }); ok(r.s === 400 && /belum benar/.test(r.data.error), "nomor bukan HP (telepon rumah) ditolak");
+r = await call("POST", "public/donations", { campaign: "zakat-maal", nominal: 5000, metode: "transfer", wa: "081277770001" }); ok(r.s === 400, "nominal di bawah minimum ditolak: " + r.data.error);
+r = await call("POST", "public/donations", { campaign: "zakat-maal", nominal: 50000, metode: "qris", wa: "081277770001" }); ok(r.s === 400, "QRIS belum diatur ditolak");
 const png = "data:image/png;base64," + Buffer.from("89504e470d0a1a0a", "hex").toString("base64");
 r = await call("POST", `public/donations/${tid}/bukti`, { gambar: png }); ok(r.s === 200, "bukti transfer diunggah");
 r = await call("POST", `admin/donations/${tid}/status`, { status: "paid" }); ok(r.s === 401, "tandai lunas tanpa login ditolak");
@@ -99,10 +101,10 @@ r = await call("POST", "admin/drive/sync", { backup: true }, adm); ok(r.s === 20
 let st = await (await fetch("http://localhost:8788/__gas/state")).json();
 ok(st["1"].sheets["Transaksi 2026"]?.Donasi > 0 && st["1"].sheets["Data Induk"]?.Donatur > 0 && st["1"].sheets["Transaksi 2026"] && Object.keys(st["1"].sheets).some((k) => /Transaksi 20\d\d/.test(k)), "spreadsheet per tahun + Data Induk dibuat: " + Object.keys(st["1"].sheets).join(", "));
 ok(st["1"].files.some((f) => f.startsWith("bukti/")) && st["1"].files.some((f) => f.startsWith("dok/")), "bukti transfer & foto masuk folder masing-masing per tahun");
-r = await call("POST", "public/donations", { campaign: "infak-terbaik", nominal: 25000, metode: "transfer" }); const nid = r.data.id;
-r = await call("GET", "admin/drive", null, adm); ok(r.data.antrean === 0, "transfer tanpa bukti belum disalin ke Drive");
+r = await call("POST", "public/donations", { campaign: "infak-terbaik", nominal: 25000, metode: "transfer", wa: "081277770002" }); const nid = r.data.id;
+r = await call("GET", "admin/drive", null, adm); const antre0 = r.data.antrean; ok(antre0 <= 1, `transfer tanpa bukti belum disalin ke Drive (antrean ${antre0}: hanya data donatur)`);
 await call("POST", `public/donations/${nid}/bukti`, { gambar: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==" });
-r = await call("GET", "admin/drive", null, adm); ok(r.data.antrean === 1, "setelah bukti diunggah, donasi masuk antrean salin (tidak memperlambat donatur)");
+r = await call("GET", "admin/drive", null, adm); ok(r.data.antrean === antre0 + 1, "setelah bukti diunggah, donasi masuk antrean salin (tidak memperlambat donatur)");
 r = await call("POST", "admin/drive", { url: G + "2", secret: "rahasia-uji-123" }, adm); ok(r.data.status === "cadangan", "Drive 2 terhubung sebagai cadangan");
 await fetch("http://localhost:8788/__gas/set?acc=1&used=" + 13.6e9);
 r = await call("POST", "admin/drive/sync", {}, adm); ok(r.data.penuh?.pindah_ke === "wizposo.data2@gmail.com", "Drive 1 mencapai 90%+ → pindah otomatis ke Drive 2");

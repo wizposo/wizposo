@@ -58,6 +58,10 @@ const num = (v) => { const n = parseInt(String(v).replace(/[^\d]/g, ""), 10); re
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const cleanWA = (v) => String(v || "").replace(/\D/g, "").replace(/^62/, "").replace(/^0/, "");
 const fmtWA = (no) => (no ? "+" + String(no).replace(/^(\d{2})(\d{3})(\d{4})(\d+)$/, "$1 $2-$3-$4") : "belum diatur");
+// Nomor admin untuk donatur: call center bila diisi, kalau tidak nomor WA admin
+const waAdmin = () => String(CFG.call_center || CFG.wa_admin || "").replace(/\D/g, "").replace(/^0/, "62");
+const waTampil = (n) => { const s = String(n || "").replace(/^62/, "0"); return s.replace(/^(\d{4})(\d{4})(\d+)$/, "$1-$2-$3"); };
+const kontakAdmin = (teks) => waAdmin() ? `<a class="kontak-admin" href="${waLink(waAdmin(), teks)}" target="_blank" rel="noopener">${ic("wa", 20)}<span><b>Hubungi admin WIZ</b><small>${waTampil(waAdmin())} · tanya atau kirim bukti lewat WhatsApp</small></span>${ic("chev")}</a>` : "";
 const waLink = (no, text) => `https://wa.me/${no || ""}?text=${encodeURIComponent(text)}`;
 const tgl = (s, opt = { day: "numeric", month: "short", year: "numeric" }) => { if (!s) return ""; const d = new Date(String(s).replace(" ", "T") + (String(s).includes("Z") ? "" : "Z")); return opt.timeStyle ? d.toLocaleString("id-ID", opt) : d.toLocaleDateString("id-ID", opt); };
 const ago = (s) => {
@@ -642,6 +646,7 @@ route(/^#\/(?:bayar|kuitansi)\/(\w+)$/, async (id) => {
         : `<label class="upload wajib" for="bukti">${ic("upload", 24)}<br><b style="color:var(--ink)">Unggah bukti transfer</b><br>Foto atau tangkapan layar struk/mutasi<input type="file" id="bukti" accept="image/*"></label>
         <div class="hint"><b>Donasi Anda baru tercatat setelah bukti diunggah.</b> Batas unggah 24 jam sejak donasi dibuat. Kuitansi dikirim ke WhatsApp setelah admin memverifikasi.</div>`}` : ""}
       <div class="info">${ic("shield", 20)}<span>Pastikan penerima atas nama <b>Wahdah Inspirasi Zakat</b>. WIZ tidak pernah meminta transfer ke rekening pribadi.</span></div>
+      ${kontakAdmin(`Assalamu'alaikum admin WIZ ${CFG.cabang}, saya sudah ${d.metode === "qris" ? "membayar lewat QRIS" : "transfer"} ${tot} untuk "${d.campaign.judul}" (No. ${d.id}). Berikut bukti transfernya:`)}
       <button class="btn ghost block" style="margin-top:12px" id="cek">${ic("repeat", 18)} Cek status</button>`);
     $("#cek").onclick = async () => { const n = await api(`public/donations/${id}/check`, { method: "POST" }); if (n.status !== "pending") draw(n); else toast("Belum terkonfirmasi. Status diperiksa otomatis."); };
     const up = $("#bukti");
@@ -722,14 +727,16 @@ function drawSheet() {
   s.innerHTML = sheetHead("Data & pembayaran") + `<div class="sheet-b">${pill()}
     <label class="f">Sapaan</label><div class="seg">${["Bapak", "Ibu", "Kak"].map((x) => `<button class="${D.sapaan === x ? "on" : ""}" data-sp="${x}">${x}</button>`).join("")}</div>
     <label class="f" for="d_nama">Nama <small>(opsional)</small></label><div class="inp"><input id="d_nama" value="${esc(D.nama)}" placeholder="Nama Anda" ${D.anonim ? "disabled" : ""}></div>
-    <div class="toggle"><span>Sembunyikan nama saya<br><small style="color:var(--muted)">Tampil sebagai "Hamba Allah"</small></span><button class="sw ${D.anonim ? "on" : ""}" id="d_anon" role="switch" aria-checked="${D.anonim}" aria-label="Sembunyikan nama"></button></div>
-    <label class="f" for="d_wa">WhatsApp untuk kuitansi otomatis <small>(dianjurkan)</small></label><div class="inp"><span>+62</span><input id="d_wa" inputmode="tel" value="${esc(D.wa)}" placeholder="812xxxxxxx"></div>
-    <div class="err" id="d_werr" hidden>Nomor WhatsApp tampaknya belum lengkap.</div>
+    <div class="toggle"><span>Sembunyikan nama saya<br><small style="color:var(--muted)">Tampil sebagai "Hamba Allah". Nomor WhatsApp tetap wajib.</small></span><button class="sw ${D.anonim ? "on" : ""}" id="d_anon" role="switch" aria-checked="${D.anonim}" aria-label="Sembunyikan nama"></button></div>
+    <label class="f" for="d_wa">Nomor WhatsApp <small style="color:var(--danger)">(wajib)</small></label><div class="inp"><span>+62</span><input id="d_wa" inputmode="tel" autocomplete="tel" required value="${esc(D.wa)}" placeholder="812xxxxxxx"></div>
+    <div class="hint" style="margin-top:4px">Wajib, agar Anda menerima <b>instruksi pembayaran</b>, <b>pesan konfirmasi & kuitansi</b> saat donasi dikonfirmasi admin, dan agar admin bisa menghubungi Anda bila ada kendala (misalnya bukti transfer belum terkirim). Nomor tidak ditampilkan ke publik.</div>
+    <div class="err" id="d_werr" hidden>Isi nomor WhatsApp yang aktif, contoh 812 3456 7890.</div>
     <label class="f" for="d_doa">Doa atau pesan <small>(opsional, tampil di halaman program)</small></label><div class="inp"><textarea id="d_doa" placeholder="Semoga menjadi amal jariyah untuk orang tua kami">${esc(D.doa)}</textarea></div>
     <label class="f">Metode pembayaran</label>
     ${methods.length ? methods.map(([id, t, sub, icn, best]) => `<button class="pay ${D.metode === id ? "on" : ""}" data-m="${id}"><span class="pl">${ic(icn, 20)}</span><span><b>${t}${best ? ' <span class="tag i" style="margin-left:4px">Tercepat</span>' : ""}</b><small>${sub}</small></span><span class="rd"></span></button>`).join("")
       : `<div class="err">Metode pembayaran belum diatur oleh admin cabang.</div>`}
     <div class="err" id="d_perr" hidden></div>
+    ${kontakAdmin(`Assalamu'alaikum admin WIZ ${CFG.cabang}, saya ingin bertanya tentang donasi "${D.c.judul}".`)}
     </div><div class="sheet-f"><div class="sumbar"><span>${esc(D.c.judul)}</span><b>${rp(D.nominal)}</b></div><button class="btn primary block" id="d_pay" ${methods.length ? "" : "disabled"}>Bayar ${rp(D.nominal)}</button></div>`;
   const keep = () => { const n = $("#d_nama"); if (n && !n.disabled) D.nama = n.value.trim(); D.wa = cleanWA($("#d_wa").value); D.doa = $("#d_doa").value.trim(); };
   $$("[data-sp]").forEach((b) => (b.onclick = () => { keep(); D.sapaan = b.dataset.sp; drawSheet(); }));
@@ -738,7 +745,7 @@ function drawSheet() {
   $("#d_wa").oninput = () => ($("#d_werr").hidden = true);
   $("#d_pay").onclick = async () => {
     keep();
-    if (D.wa && D.wa.length < 9) { $("#d_werr").hidden = false; $("#d_wa").focus(); return; }
+    if (!/^8\d{8,12}$/.test(D.wa || "")) { $("#d_werr").hidden = false; $("#d_wa").focus(); $("#d_wa").scrollIntoView({ block: "center" }); return; }
     const btn = $("#d_pay"); btn.disabled = true; btn.textContent = "Memproses…";
     try {
       const r = await api("public/donations", { method: "POST", body: { campaign: D.c.slug, nominal: D.nominal, sapaan: D.sapaan, nama: D.anonim ? "" : D.nama, wa: D.wa, anonim: D.anonim, doa: D.doa,

@@ -337,3 +337,7 @@ header.top .more svg{width:22px;height:22px;fill:currentColor}
 .art .vid-alt{display:block;text-align:center;font-size:12px;color:var(--muted);margin-top:6px;text-decoration:underline}
 
 .upload.wajib{border-color:var(--orange,#F7941D);background:#fff7ec}
+
+.kontak-admin{display:flex;align-items:center;gap:12px;margin-top:12px;padding:12px 14px;border-radius:14px;background:#e9f9ef;color:var(--ink);text-decoration:none;border:1px solid #bfe8cf}
+.kontak-admin>svg:first-child{color:#1faa59;flex:none}
+.kontak-admin span{flex:1;min-width:0}.kontak-admin b{display:block;font-size:14px}.kontak-admin small{color:var(--muted);font-size:12.5px}

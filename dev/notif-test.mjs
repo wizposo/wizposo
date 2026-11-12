@@ -117,3 +117,19 @@ rows = await riwayat();
 ok(rows.some((x) => x.judul === "Info admin: penarikan" && x.pesan.includes(`/admin#upah?tarik=petugas-${r.data.id}`) && /tarik upah ZISKO/.test(x.pesan)), "admin menerima WA penarikan ZISKO berisi tautan persetujuan");
 await call("PUT", "admin/settings", { ...s0 }, adm);
 console.log("TARIK_ID " + tidF);
+
+// Nomor WA wajib (juga untuk Hamba Allah) + pengingat bukti 2 jam
+r = await call("POST", "public/donations", { campaign: camp.slug, nominal: 30000, anonim: true, metode: "transfer" });
+ok(r.s === 400 && /WhatsApp wajib/.test(r.data.error), "tanpa nomor WA ditolak walau Hamba Allah");
+r = await call("POST", "public/donations", { campaign: camp.slug, nominal: 30000, anonim: true, wa: "081355550004", metode: "transfer" });
+ok(r.s === 201 && r.data.id, "Hamba Allah dengan nomor WA diterima");
+const ingat = r.data.id;
+await fetch(HOST + "/__sql", { method: "POST", body: JSON.stringify({ sql: "UPDATE donations SET created_at=datetime('now','-3 hours') WHERE id=?", args: [ingat] }) });
+await call("GET", "admin/donations", null, adm);
+rows = await riwayat();
+const pi = rows.filter((x) => x.judul === "Pengingat bukti transfer" && x.wa === "6281355550004");
+ok(pi.length === 1 && pi[0].pesan.includes(`/#/bayar/${ingat}`) && /balas pesan ini/.test(pi[0].pesan), "2 jam tanpa bukti: donatur diingatkan dengan tautan unggah bukti");
+await call("GET", "admin/donations", null, adm);
+ok((await riwayat()).filter((x) => x.judul === "Pengingat bukti transfer" && x.wa === "6281355550004").length === 1, "pengingat hanya sekali");
+const dd = (await call("GET", "admin/donations?status=tanpa_bukti", null, adm)).data.rows.find((x) => x.id === ingat);
+ok(dd && dd.ingat_at, "admin melihat waktu pengingat terkirim");
