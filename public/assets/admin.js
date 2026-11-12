@@ -327,11 +327,52 @@ VIEWS.program = async () => {
       <td>${c.batas ? tglD(c.batas + " 00:00:00") : "-"}</td><td><span class="tag ${c.status === "aktif" ? "st-paid" : "st-pending"}">${esc(c.status)}</span></td></tr>`; }).join("")}</tbody></table></div>`);
   $$("tr[data-id]").forEach((tr) => tr.onclick = () => campForm(CAMPS.find((c) => c.id === +tr.dataset.id)));
 };
+// Galeri gambar: tambah banyak sekaligus (tanpa batas), pilih gambar utama, atur urutan, hapus
+function galeriState(o) {
+  const ids = [...(o.galeri_ids || [])];
+  if (o.cover_id && !ids.includes(o.cover_id)) ids.unshift(o.cover_id);
+  return { ids, cover: o.cover_id || ids[0] || null };
+}
+function galeriEditor(hostSel, st) {
+  const host = $(hostSel);
+  const draw = () => {
+    if (st.cover && !st.ids.includes(st.cover)) st.cover = st.ids[0] || null;
+    if (!st.cover && st.ids.length) st.cover = st.ids[0];
+    host.innerHTML = `<div class="gal">${st.ids.map((id, i) => `<div class="gal-it ${id === st.cover ? "utama" : ""}">
+        <img src="/api/media/${id}" alt="" loading="lazy">${id === st.cover ? `<span class="gal-b">Utama</span>` : ""}
+        <div class="gal-act">${id === st.cover ? "" : `<button type="button" data-g="utama" data-i="${i}" title="Jadikan gambar utama">★ Utama</button>`}
+          <button type="button" data-g="kiri" data-i="${i}" title="Geser ke kiri" ${i ? "" : "disabled"}>‹</button><button type="button" data-g="kanan" data-i="${i}" title="Geser ke kanan" ${i < st.ids.length - 1 ? "" : "disabled"}>›</button>
+          <button type="button" data-g="hapus" data-i="${i}" title="Hapus" class="del">✕</button></div></div>`).join("")}
+      <label class="gal-add"><input type="file" accept="image/*" multiple hidden><span>${ic("plus", 24)}<br>Tambah gambar</span></label></div>
+      <p class="hint" style="margin:6px 0 0">${st.ids.length ? `${st.ids.length} gambar. ` : ""}Gambar <b>Utama</b> tampil di kartu dan menjadi slide pertama. Boleh pilih banyak gambar sekaligus.</p>`;
+    host.querySelectorAll("[data-g]").forEach((b) => b.onclick = () => {
+      const i = +b.dataset.i, ids = st.ids;
+      if (b.dataset.g === "utama") st.cover = ids[i];
+      if (b.dataset.g === "kiri" && i > 0) [ids[i - 1], ids[i]] = [ids[i], ids[i - 1]];
+      if (b.dataset.g === "kanan" && i < ids.length - 1) [ids[i + 1], ids[i]] = [ids[i], ids[i + 1]];
+      if (b.dataset.g === "hapus") ids.splice(i, 1);
+      draw();
+    });
+    const inp = host.querySelector(".gal-add input");
+    inp.onchange = async () => {
+      const files = [...inp.files]; if (!files.length) return;
+      const lbl = host.querySelector(".gal-add span");
+      for (let k = 0; k < files.length; k++) {
+        lbl.innerHTML = `Mengunggah ${k + 1}/${files.length}…`;
+        try { const data = await resizeImage(files[k]); st.ids.push((await api("admin/media", { method: "POST", body: { gambar: data } })).id); }
+        catch (e) { toast(`${files[k].name}: ${e.message}`); }
+      }
+      draw();
+    };
+  };
+  draw();
+}
+
 async function campForm(c = {}) {
-  let coverId = c.cover_id || null;
+  const gal = galeriState(c);
   const kats = [...new Set(["Zakat", "Infak", "Sedekah", "Kesehatan", "Pendidikan", "Ekonomi", "Dakwah", "Kemanusiaan", "Pembangunan", "Fidyah", ...CAMPS.map((x) => x.kategori).filter(Boolean)])];
   modal(c.id ? "Ubah program" : "Program baru", `<datalist id="kats">${kats.map((k) => `<option value="${esc(k)}">`).join("")}</datalist>
-    <label class="f">Gambar sampul</label><label class="cover-prev" for="cv_f" style="cursor:pointer" id="cv_p">${c.cover ? `<img src="${c.cover}" alt="">` : `<span>${ic("plus", 28)}<br>Unggah gambar (rasio 16:9)</span>`}</label><input type="file" id="cv_f" accept="image/*" hidden>
+    <label class="f">Gambar program <small>(rasio 16:9 paling pas)</small></label><div id="c_gal"></div>
     <div class="fg">${field("c_judul", "Judul", c.judul || "", { full: true })}${field("c_ringkas", "Ringkasan singkat", c.ringkas || "", { full: true, hint: "Tampil di kartu program, maksimal 160 karakter." })}
     ${field("c_jenis", "Jenis dana", c.jenis_dana || "infak", { sel: [["infak", "Infak / sedekah"], ["zakat", "Zakat"], ["wakaf", "Wakaf"], ["fidyah", "Fidyah"]] })}${field("c_kat", "Kategori", c.kategori || "", { list: "kats" })}
     ${field("c_target", "Target (kosongkan bila tanpa target)", c.target || "", { pre: "Rp", num: true })}${field("c_batas", "Batas waktu (opsional)", c.batas || "", { type: "date" })}
@@ -342,11 +383,10 @@ async function campForm(c = {}) {
       <button class="btn ghost sm" style="margin-top:8px" id="u_add">${ic("plus")} Terbitkan kabar</button>` : ""}`,
     `${c.id ? `<button class="btn danger sm" id="c_del" style="margin-right:auto">Hapus</button><a class="btn ghost sm" href="/#/c/${esc(c.slug)}" target="_blank" rel="noopener">${ic("ext")} Lihat</a>` : ""}<button class="btn primary sm" id="c_save">Simpan</button>`);
   bindMoney("c_target");
-  $("#cv_f").onchange = async () => { const f = $("#cv_f").files[0]; if (!f) return; toast("Mengunggah gambar…");
-    try { const data = await resizeImage(f); coverId = (await api("admin/media", { method: "POST", body: { gambar: data } })).id; $("#cv_p").innerHTML = `<img src="${data}" alt="">`; } catch (e) { mErr(e.message); } };
+  galeriEditor("#c_gal", gal);
   $("#c_save").onclick = (e) => busy(e.target, async () => {
     const body = { judul: val("c_judul"), ringkas: val("c_ringkas"), jenis_dana: val("c_jenis"), kategori: val("c_kat"), target: num(val("c_target")), batas: val("c_batas"),
-      ikon: val("c_ikon"), status: val("c_status"), urutan: num(val("c_urut")), unggulan: $("#c_ung").checked, cerita: $("#c_cerita").value, cover_id: coverId, slug: c.slug };
+      ikon: val("c_ikon"), status: val("c_status"), urutan: num(val("c_urut")), unggulan: $("#c_ung").checked, cerita: $("#c_cerita").value, cover_id: gal.cover, galeri: gal.ids, slug: c.slug };
     await api(c.id ? "admin/campaigns/" + c.id : "admin/campaigns", { method: c.id ? "PUT" : "POST", body }); closeModal(); toast("Program disimpan"); VIEWS.program();
   });
   if (!c.id) return;
@@ -988,17 +1028,14 @@ const BLK = { p: "Paragraf", h: "Subjudul", img: "Gambar", video: "Video", quote
 async function artForm(id) {
   const [a, st] = await Promise.all([id ? api("admin/articles/" + id) : Promise.resolve({ status: "draf", blocks: [{ t: "p", text: "" }] }), api("admin/settings").catch(() => ({}))]);
   const blocks = (a.blocks || []).map((b) => (b.t === "img" ? { ...b, src: "/api/media/" + b.media_id } : { ...b }));
-  let coverId = a.cover_id || null;
+  const gal = galeriState(a);
   modal(id ? "Ubah dokumentasi" : "Tulis dokumentasi penyaluran", `<div class="fg">
       ${field("ar_judul", "Judul", a.judul || "", { full: true, ph: "Contoh: Ambulans WIZ antar 12 pasien dhuafa ke RSUD Poso bulan ini" })}
       ${field("ar_camp", "Program terkait", a.campaign_id || "", { sel: [["", "Umum (tanpa program)"], ...CAMPS.map((c) => [c.id, c.judul])] })}
       ${field("ar_tgl", "Tanggal kegiatan", a.tanggal || todayW(), { type: "date" })}
       ${field("ar_lok", "Lokasi", a.lokasi || "", { ph: "Kel. Gebangrejo, Poso Kota" })}
-      ${field("ar_pen", "Jumlah penerima manfaat", a.penerima || "", { num: true, hint: "Opsional. Tampil sebagai angka dampak." })}
-      ${field("ar_ters", "Dana tersalur", a.tersalur || "", { pre: "Rp", num: true, hint: "Opsional." })}
       ${field("ar_ring", "Ringkasan", a.ringkas || "", { full: true, hint: "Opsional. Kosongkan untuk memakai awal paragraf pertama." })}</div>
-    <label class="f">Foto sampul <small>(kosongkan untuk memakai gambar pertama)</small></label>
-    <label class="cover-prev" style="cursor:pointer;max-width:360px" for="ar_cv" id="ar_cvp">${a.cover ? `<img src="${a.cover}" alt="">` : `<span>${ic("plus", 24)}<br>Unggah sampul</span>`}</label><input type="file" id="ar_cv" accept="image/*" hidden>
+    <label class="f">Foto slide <small>(tampil bergeser di bagian atas laporan; kosongkan untuk memakai foto pertama di isi tulisan)</small></label><div id="ar_gal"></div>
     <div class="sect">Isi tulisan</div><div id="blks"></div>
     <div class="addbar"><span class="hint">Tambah:</span>
       <button class="btn ghost xs" data-add="p">+ Paragraf</button><button class="btn ghost xs" data-add="h">+ Subjudul</button>
@@ -1038,11 +1075,10 @@ async function artForm(id) {
     }
     $("#ar_imgs").value = "";
   };
-  $("#ar_cv").onchange = async () => { const f = $("#ar_cv").files[0]; if (!f) return;
-    try { const data = await resizeImage(f); coverId = (await api("admin/media", { method: "POST", body: { gambar: data } })).id; $("#ar_cvp").innerHTML = `<img src="${data}" alt="">`; } catch (e) { mErr(e.message); } };
+  galeriEditor("#ar_gal", gal);
   const save = (status) => async (e) => busy(e.currentTarget, async () => {
-    const body = { judul: val("ar_judul"), campaign_id: val("ar_camp"), tanggal: val("ar_tgl"), lokasi: val("ar_lok"), penerima: num(val("ar_pen")), tersalur: num(val("ar_ters")),
-      ringkas: val("ar_ring"), cover_id: coverId, status, blocks: blocks.map(({ src, ...b }) => b) };
+    const body = { judul: val("ar_judul"), campaign_id: val("ar_camp"), tanggal: val("ar_tgl"), lokasi: val("ar_lok"), penerima: a.penerima || 0, tersalur: a.tersalur || 0,
+      ringkas: val("ar_ring"), cover_id: gal.cover, galeri: gal.ids, status, blocks: blocks.map(({ src, ...b }) => b) };
     if (status === "terbit" && !body.blocks.some((b) => (b.text || b.media_id || b.url))) throw new Error("Isi tulisan masih kosong.");
     await api(id ? "admin/articles/" + id : "admin/articles", { method: id ? "PUT" : "POST", body });
     closeModal(); toast(status === "terbit" ? "Dokumentasi diterbitkan" : "Draf disimpan"); if ((location.hash.slice(1) || "") === "berita") VIEWS.berita(); else location.hash = "#berita";

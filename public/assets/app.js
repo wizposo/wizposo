@@ -116,7 +116,7 @@ function nav(active) {
     ? `<button class="mid" onclick="openDonate('infak-terbaik')" aria-label="Donasi sekarang"><span class="c">${ic(i, 24)}</span><span>${l}</span></button>`
     : `<button class="${active === h ? "on" : ""}" onclick="location.hash='${h}'">${ic(i, 22)}<span>${l}</span></button>`).join("");
 }
-const view = (html) => { $("#view").innerHTML = html; };
+const view = (html) => { $("#view").innerHTML = html; initSlider(); };
 // Menu titik tiga: pintu masuk pengurus & relawan yang sengaja disamarkan dari donatur
 function moreMenu(e) {
   e.stopPropagation();
@@ -235,7 +235,7 @@ route(/^#\/c\/([\w-]+)$/, async (slug) => {
   const [c, arts] = await Promise.all([api("public/campaigns/" + slug), api("public/articles?limit=10&campaign=" + encodeURIComponent(slug)).catch(() => [])]); const [fg, bg] = kc(c);
   header(c.judul); nav("");
   const pct = c.target ? Math.min(100, Math.round(c.terkumpul / c.target * 100)) : 0;
-  view(`<div class="dhero" style="background:${bg};color:${fg}">${c.cover ? `<img src="${c.cover}" alt="">` : ic(c.ikon, 72)}</div>
+  view(`${slider(c.galeri && c.galeri.length ? c.galeri : c.cover ? [c.cover] : [], `<div class="dhero" style="background:${bg};color:${fg}">${ic(c.ikon, 72)}</div>`, `background:${bg}`)}
     <div class="card" style="margin-top:-12px;position:relative">
       <span class="tag ${c.jenis_dana === "zakat" ? "z" : "i"}">${esc(c.jenis_dana.toUpperCase())}</span>${c.kategori ? ` <span class="tag i">${esc(c.kategori)}</span>` : ""}
       <h2 style="margin:8px 0 4px;font-size:20px">${esc(c.judul)}</h2><p style="margin:0;color:var(--muted);font-size:14px">${esc(c.ringkas || "")}</p>
@@ -508,9 +508,35 @@ function artCard(a, full = false) {
     <span class="bd"><h3>${esc(a.judul)}</h3><p>${esc(a.ringkas || "")}</p>
       <span class="meta"><span>${tgl(a.tanggal ? a.tanggal + " 00:00:00" : a.created_at)}${a.lokasi ? " · " + esc(a.lokasi) : ""}</span>${a.penerima ? `<b>${a.penerima} penerima</b>` : ""}</span></span></a>`;
 }
+// Slide gambar: geser (sentuh), tombol panah, titik, dan berganti otomatis tiap 5 detik
+let SLIDE_T = null;
+function slider(urls, fallback = "", style = "") {
+  if (!urls || !urls.length) return fallback;
+  const n = urls.length;
+  return `<div class="dhero slider" style="${style}" data-n="${n}"><div class="sl-track">${urls.map((u, i) => `<div class="sl-it"><img src="${u}" alt="" ${i ? 'loading="lazy"' : ""} data-zoom="${i}"></div>`).join("")}</div>
+    ${n > 1 ? `<button class="sl-nav prev" aria-label="Sebelumnya">‹</button><button class="sl-nav next" aria-label="Berikutnya">›</button>
+      <div class="sl-dots">${urls.map((_, i) => `<i class="${i ? "" : "on"}"></i>`).join("")}</div><span class="sl-count">1/${n}</span>` : ""}</div>`;
+}
+function initSlider() {
+  clearInterval(SLIDE_T);
+  const el = $(".slider"); if (!el) return;
+  const tr = el.querySelector(".sl-track"), n = +el.dataset.n, dots = [...el.querySelectorAll(".sl-dots i")], cnt = el.querySelector(".sl-count");
+  const idx = () => Math.round(tr.scrollLeft / tr.clientWidth);
+  const go = (i) => tr.scrollTo({ left: ((i + n) % n) * tr.clientWidth, behavior: "smooth" });
+  tr.addEventListener("scroll", () => { const i = idx(); dots.forEach((d, k) => d.classList.toggle("on", k === i)); if (cnt) cnt.textContent = `${i + 1}/${n}`; }, { passive: true });
+  el.querySelector(".prev")?.addEventListener("click", () => { stop(); go(idx() - 1); });
+  el.querySelector(".next")?.addEventListener("click", () => { stop(); go(idx() + 1); });
+  dots.forEach((d, k) => d.addEventListener("click", () => { stop(); go(k); }));
+  const stop = () => clearInterval(SLIDE_T);
+  tr.addEventListener("touchstart", stop, { passive: true });
+  // Ketuk gambar: lihat ukuran penuh
+  tr.querySelectorAll("img").forEach((im) => im.addEventListener("click", () => { stop(); window.open(im.src, "_blank", "noopener"); }));
+  if (n > 1 && !matchMedia("(prefers-reduced-motion: reduce)").matches) SLIDE_T = setInterval(() => { if (!document.body.contains(el)) return stop(); go(idx() + 1); }, 5000);
+}
+
 function artRow(a) {
   return `<a class="arow" href="#/berita/${esc(a.slug)}"><span class="th">${a.cover ? `<img src="${a.cover}" alt="" loading="lazy">` : ic("news", 26)}</span>
-    <span class="tx"><b>${esc(a.judul)}</b><small>${tgl(a.tanggal ? a.tanggal + " 00:00:00" : a.created_at)}${a.penerima ? " · " + a.penerima + " penerima manfaat" : ""}</small></span>${ic("chev")}</a>`;
+    <span class="tx"><b>${esc(a.judul)}</b><small>${tgl(a.tanggal ? a.tanggal + " 00:00:00" : a.created_at)}${a.lokasi ? " · " + esc(a.lokasi) : ""}</small></span>${ic("chev")}</a>`;
 }
 function renderBlocks(blocks) {
   const md = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\n/g, "<br>");
@@ -538,12 +564,12 @@ route(/^#\/berita\/([\w-]+)$/, async (slug) => {
   const a = await api("public/articles/" + slug);
   header("Laporan penyaluran"); nav("");
   const tglK = tgl(a.tanggal ? a.tanggal + " 00:00:00" : a.created_at, { day: "numeric", month: "long", year: "numeric" });
-  view(`${a.cover ? `<div class="dhero"><img src="${a.cover}" alt=""></div>` : ""}
-    <article class="art card" style="${a.cover ? "margin-top:-12px;position:relative" : ""}">
+  const foto = a.galeri && a.galeri.length ? a.galeri : a.cover ? [a.cover] : [];
+  view(`${slider(foto)}
+    <article class="art card" style="${foto.length ? "margin-top:-12px;position:relative" : ""}">
       <span class="tag z">LAPORAN PENYALURAN</span>${a.program ? ` <a class="tag i" href="#/c/${esc(a.program_slug)}">${esc(a.program)}</a>` : ""}
       <h1>${esc(a.judul)}</h1>
       <div class="ameta">${ic("calendar", 16)} ${tglK}${a.lokasi ? ` · ${esc(a.lokasi)}` : ""}</div>
-      ${a.penerima || a.tersalur ? `<div class="impact">${a.penerima ? `<div><b>${a.penerima.toLocaleString("id-ID")}</b>penerima manfaat</div>` : ""}${a.tersalur ? `<div><b>${rpk(a.tersalur)}</b>dana tersalur</div>` : ""}</div>` : ""}
       <div class="story">${renderBlocks(a.blocks)}</div>
       <p class="hint" style="margin:14px 0 0">Terima kasih kepada seluruh donatur yang telah menitipkan zakat, infak, dan sedekahnya melalui WIZ Cabang ${esc(CFG.cabang)}.</p>
     </article>
