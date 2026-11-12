@@ -547,7 +547,8 @@ function renderBlocks(blocks) {
     if (b.t === "img") return `<figure><img src="${b.src}" alt="${esc(b.caption || "Dokumentasi penyaluran")}" loading="lazy">${b.caption ? `<figcaption>${esc(b.caption)}</figcaption>` : ""}</figure>`;
     if (b.t === "video") {
       const cap = b.caption ? `<figcaption>${esc(b.caption)}</figcaption>` : "";
-      if (b.kind === "youtube") return `<figure><div class="vid"><iframe src="https://www.youtube-nocookie.com/embed/${esc(b.id)}" title="${esc(b.caption || "Video penyaluran")}" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>${cap}</figure>`;
+      if (b.kind === "youtube") return `<figure><div class="vid${b.tegak ? " tegak" : ""}"><iframe src="https://www.youtube-nocookie.com/embed/${esc(b.id)}" title="${esc(b.caption || "Video penyaluran")}" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>${cap}</figure>`;
+      if (b.kind === "embed") return `<figure><div class="vid${b.rasio === "9/16" ? " tegak" : ""}"><iframe src="${esc(b.src)}" title="${esc(b.caption || "Video penyaluran")}" loading="lazy" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen scrolling="no"></iframe></div>${cap}<a class="vid-alt" href="${esc(b.url)}" target="_blank" rel="noopener">Video tidak tampil? Buka di ${esc(b.host)} ↗</a></figure>`;
       if (b.kind === "file") return `<figure><video src="${b.src}" controls playsinline preload="metadata"></video>${cap}</figure>`;
       return `<a class="linkrow" href="${esc(b.url)}" target="_blank" rel="noopener"><span class="ib o">${ic("play")}</span><span class="tx"><b>${esc(b.caption || "Tonton video penyaluran")}</b><span>Buka di ${esc(b.host)}</span></span>${ic("chev")}</a>`;
     }

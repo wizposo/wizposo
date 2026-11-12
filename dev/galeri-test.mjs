@@ -40,3 +40,22 @@ ok(a.cover === `/api/media/${ids[2]}` && a.galeri.length === 1, "tanpa galeri: f
 const adminA = (await call("GET", "admin/articles/" + r.data.id, null, adm)).data;
 ok(Array.isArray(adminA.galeri_ids), "admin menerima daftar id galeri untuk diedit");
 console.log("SLUG " + slug);
+
+// Video di berita/laporan: berbagai platform diputar langsung
+const vids = [
+  ["https://youtu.be/dQw4w9WgXcQ", "youtube"], ["https://www.youtube.com/shorts/dQw4w9WgXcQ", "youtube"],
+  ["https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQr/view?usp=sharing", "embed", "Google Drive"],
+  ["https://www.facebook.com/wizposo/videos/1234567890123456/", "embed", "Facebook"], ["https://fb.watch/abc123XY/", "embed", "Facebook"],
+  ["https://www.facebook.com/reel/987654321098765", "embed", "Facebook"],
+  ["https://www.tiktok.com/@wizposo/video/7301234567890123456", "embed", "TikTok"],
+  ["https://www.instagram.com/reel/C1a2B3c4D5e/", "embed", "Instagram"], ["https://vimeo.com/123456789", "embed", "Vimeo"],
+  ["https://contoh.com/video.html", "link"],
+];
+r = await call("POST", "admin/articles", { judul: "Laporan Video Uji", status: "terbit", blocks: [{ t: "p", text: "Video kegiatan." }, ...vids.map(([url]) => ({ t: "video", url, caption: "Video" }))] }, adm);
+a = (await call("GET", "public/articles/" + r.data.slug)).data;
+const vb = a.blocks.filter((b) => b.t === "video");
+ok(vb.length === vids.length, `${vb.length} blok video tersimpan`);
+vids.forEach(([url, kind, host], i) => ok(vb[i].kind === kind && (!host || vb[i].host === host), `${url.replace(/^https:\/\/(www\.)?/, "").slice(0, 38)} → ${vb[i].kind}${vb[i].host ? " " + vb[i].host : ""}`));
+ok(vb[1].tegak === true && vb[0].tegak === false, "YouTube Shorts ditampilkan tegak");
+ok(vb[6].rasio === "9/16" && vb[2].rasio === "16/9", "TikTok tegak, Drive mendatar");
+ok(vb[2].src === "https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQr/preview", "Drive memakai pemutar /preview");

@@ -332,3 +332,6 @@ header.top .more svg{width:22px;height:22px;fill:currentColor}
 .slider .sl-dots i.on{width:18px;background:#fff}
 .slider .sl-count{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.45);color:#fff;font-size:12px;padding:2px 8px;border-radius:99px;font-variant-numeric:tabular-nums}
 @media (hover:none){.slider .sl-nav{display:none}}
+
+.art .vid.tegak{aspect-ratio:9/16;max-width:340px;margin:0 auto}
+.art .vid-alt{display:block;text-align:center;font-size:12px;color:var(--muted);margin-top:6px;text-decoration:underline}
