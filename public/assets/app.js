@@ -136,7 +136,10 @@ const ROUTES = [];
 const route = (re, fn) => ROUTES.push([re, fn]);
 async function router() {
   clearInterval(liveTimer); clearInterval(payTimer); $(".cta")?.remove(); $(".popmenu")?.remove(); $("#nav").hidden = false;
-  let h = location.hash || "#/";
+  // Alamat rapi /c/slug dan /berita/slug (tautan bagikan) dibaca sebagai rute aplikasi
+  const pm = /^\/(c|program|berita)\/([\w-]+)\/?$/.exec(location.pathname);
+  let h = location.hash || (pm ? (pm[1] === "berita" ? "#/berita/" : "#/c/") + pm[2] : "#/");
+  rapikanAlamat(h);
   const legacy = h.match(/^#(kotak|pundi)-(.+)$/i); if (legacy) { location.replace(`#/${legacy[1].toLowerCase()}/${legacy[2]}`); return; }
   for (const [re, fn] of ROUTES) {
     const m = h.match(re);
@@ -144,7 +147,17 @@ async function router() {
   }
   location.replace("#/");
 }
-addEventListener("hashchange", router);
+// Alamat di browser untuk program/berita dibuat /c/slug atau /berita/slug (tanpa #) agar tautan yang disalin
+// dari address bar tetap memunculkan gambar sampul saat dibagikan di WhatsApp/Facebook.
+function rapikanAlamat(h) {
+  const m = /^#\/(c|berita)\/([\w-]+)$/.exec(h);
+  const target = m ? `/${m[1]}/${m[2]}${location.search}` : location.pathname !== "/" ? `/${location.search}${h}` : null;
+  if (target && target !== location.pathname + location.search + location.hash) history.replaceState(history.state, "", target);
+}
+let RUTE_T = null;
+const ruteNanti = () => { clearTimeout(RUTE_T); RUTE_T = setTimeout(router, 0); };
+addEventListener("hashchange", ruteNanti);
+addEventListener("popstate", ruteNanti);
 
 /* ---------- Komponen ---------- */
 function campCard(c, full = false) {

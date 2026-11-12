@@ -1,6 +1,6 @@
 /* Service worker: aplikasi donatur tetap terbuka saat sinyal lemah. API & dashboard selalu dari jaringan. */
-const VERSI = "wiz-v3";
-const SHELL = ["/", "/assets/app.css", "/assets/app.js", "/assets/logo.png", "/assets/icon.png", "/manifest.webmanifest"];
+const VERSI = "wiz-v4";
+const SHELL = ["/", "/assets/app.css?v=20261112c", "/assets/app.js?v=20261112c", "/assets/logo.png", "/assets/icon.png", "/manifest.webmanifest"];
 self.addEventListener("install", (e) => e.waitUntil(caches.open(VERSI).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())));
 self.addEventListener("activate", (e) => e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== VERSI).map((k) => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener("fetch", (e) => {

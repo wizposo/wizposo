@@ -402,7 +402,7 @@ async function campForm(c = {}) {
     ${field("c_cerita", "Cerita program", c.cerita || "", { area: true, rows: 8, full: true, hint: "Pisahkan paragraf dengan baris kosong. Tulis **teks** untuk huruf tebal." })}</div>
     ${c.id ? `<div class="sect">Kabar terbaru</div><div class="list" id="upd"></div><div class="fg">${field("u_judul", "Judul kabar", "", { full: true, ph: "Contoh: Alhamdulillah, bantuan tahap 1 disalurkan" })}${field("u_isi", "Isi kabar", "", { area: true, full: true })}</div>
       <button class="btn ghost sm" style="margin-top:8px" id="u_add">${ic("plus")} Terbitkan kabar</button>` : ""}`,
-    `${c.id ? `<button class="btn danger sm" id="c_del" style="margin-right:auto">Hapus</button><a class="btn ghost sm" href="/#/c/${esc(c.slug)}" target="_blank" rel="noopener">${ic("ext")} Lihat</a>` : ""}<button class="btn primary sm" id="c_save">Simpan</button>`);
+    `${c.id ? `<button class="btn danger sm" id="c_del" style="margin-right:auto">Hapus</button><a class="btn ghost sm" href="/c/${esc(c.slug)}" target="_blank" rel="noopener">${ic("ext")} Lihat</a>` : ""}<button class="btn primary sm" id="c_save">Simpan</button>`);
   bindMoney("c_target");
   galeriEditor("#c_gal", gal);
   $("#c_save").onclick = (e) => busy(e.target, async () => {
