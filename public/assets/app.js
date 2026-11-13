@@ -87,13 +87,67 @@ async function api(path, opt = {}) {
   return data;
 }
 function story(t) { return esc(t || "").split(/\n{2,}/).map((p) => `<p>${p.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\n/g, "<br>")}</p>`).join(""); }
-async function resizeImage(file, max = 1200) {
-  const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = URL.createObjectURL(file); });
-  const s = Math.min(1, max / Math.max(img.width, img.height)); const c = document.createElement("canvas");
-  c.width = Math.round(img.width * s); c.height = Math.round(img.height * s); c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-  let q = 0.82, out = c.toDataURL("image/webp", q); while (out.length > 850000 && q > 0.4) { q -= 0.12; out = c.toDataURL("image/webp", q); }
-  if (!out.startsWith("data:image/webp")) out = c.toDataURL("image/jpeg", 0.8);
-  return out;
+// Baca foto dari HP: createImageBitmap (ikut orientasi kamera, hemat memori), cadangan <img>
+async function bacaGambar(file) {
+  if (window.createImageBitmap) { try { return await createImageBitmap(file, { imageOrientation: "from-image" }); } catch {} }
+  return new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error("baca")); i.src = URL.createObjectURL(file); });
+}
+const fileDataURL = (f) => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = () => no(new Error("File tidak bisa dibaca.")); r.readAsDataURL(f); });
+// Perkecil foto sampai di bawah batas (karakter base64). Dicoba WebP, lalu JPEG, lalu ukuran diperkecil bertahap.
+async function resizeImage(file, max = 1200, batas = 850000) {
+  if (!file) throw new Error("Pilih foto terlebih dahulu.");
+  if (file.type && !/^image\//.test(file.type)) throw new Error("File harus berupa gambar (foto atau tangkapan layar), bukan PDF/dokumen.");
+  let img;
+  try { img = await bacaGambar(file); } catch {
+    if (/^image\/(jpeg|png|webp)$/.test(file.type) && file.size * 1.37 < batas) return fileDataURL(file);
+    throw new Error(/hei[cf]/i.test((file.type || "") + file.name)
+      ? "Format foto HEIC belum didukung browser ini. Kirim tangkapan layar (screenshot) bukti transfer saja."
+      : "Foto tidak bisa dibaca. Coba kirim tangkapan layar (screenshot) bukti transfer.");
+  }
+  let s = Math.min(1, max / Math.max(img.width, img.height));
+  for (let coba = 0; coba < 5; coba++) {
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(img.width * s)); c.height = Math.max(1, Math.round(img.height * s));
+    const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+    let fmt = "image/webp", q = 0.8, out = c.toDataURL(fmt, q);
+    if (!out.startsWith("data:image/webp")) { fmt = "image/jpeg"; out = c.toDataURL(fmt, q); }
+    while (out.length > batas && q > 0.45) { q -= 0.1; out = c.toDataURL(fmt, q); }
+    if (out.length <= batas && out.length > 100) { img.close?.(); return out; }
+    s *= 0.72;
+  }
+  img.close?.();
+  throw new Error("Foto terlalu besar untuk diunggah. Kirim tangkapan layar (screenshot) bukti transfer.");
+}
+// Unggah bukti transfer: tampilkan proses, coba ulang sekali, catat penyebab bila gagal, tawarkan jalan keluar
+const tidur = (ms) => new Promise((r) => setTimeout(r, ms));
+async function unggahBukti(id, file, selesai) {
+  const box = $(".upload.wajib"), err = $("#bukti_err");
+  const status = (t) => { if (box) box.querySelector("b").textContent = t; };
+  if (err) err.hidden = true;
+  box?.classList.add("proses");
+  let gambar, salah = null;
+  try { status("Memproses foto…"); gambar = await resizeImage(file, 1280, 420000); }
+  catch (e) { salah = e.message; }
+  if (gambar) {
+    for (let k = 0; k < 2; k++) {
+      try {
+        status(k ? "Mencoba lagi…" : "Mengunggah… jangan tutup halaman ini");
+        const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 60000);
+        const r = await fetch(`/api/public/donations/${id}/bukti`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ gambar }), signal: ctl.signal });
+        clearTimeout(t);
+        const data = await r.json().catch(() => ({}));
+        if (r.ok) { box?.classList.remove("proses"); toast("Bukti terkirim. Terima kasih!"); return selesai(); }
+        salah = data.error || `Server menjawab ${r.status}`;
+        if (r.status < 500) break;
+      } catch (e) { salah = e.name === "AbortError" ? "Koneksi terlalu lambat (lebih dari 1 menit)." : "Koneksi internet terputus saat mengunggah."; }
+      await tidur(1500);
+    }
+  }
+  box?.classList.remove("proses"); status("Unggah bukti transfer");
+  const info = `${salah} [${file.type || "?"}, ${Math.round(file.size / 1024)} KB, ${navigator.userAgent.slice(0, 80)}]`;
+  fetch(`/api/public/donations/${id}/bukti-gagal`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ alasan: info }) }).catch(() => {});
+  if (err) { err.hidden = false; err.querySelector("span").textContent = salah; err.scrollIntoView({ block: "center", behavior: "smooth" }); }
+  else toast(salah);
 }
 
 /* ---------- State ---------- */
@@ -620,9 +674,13 @@ route(/^#\/(?:bayar|kuitansi)\/(\w+)$/, async (id) => {
       view(`<div class="statusbox"><span class="st failed">Kedaluwarsa</span><h2 style="margin:10px 0 4px">${rp(d.total)}</h2><p style="color:var(--muted);margin:0">Bukti transfer tidak diunggah dalam 24 jam.</p></div>
         <div class="sec"><h2>Sudah terlanjur transfer?</h2></div>
         <label class="upload wajib" for="bukti">${ic("upload", 24)}<br><b style="color:var(--ink)">Unggah bukti transfer</b><br>Donasi akan diperiksa kembali oleh admin<input type="file" id="bukti" accept="image/*"></label>
+        ${buktiGagalBox()}
+        <button class="btn ghost block" style="margin-top:10px" id="klaim">${ic("check", 18)} Saya sudah transfer, bukti tidak bisa diunggah</button>
         <a class="btn primary block" style="margin-top:12px" href="#/c/${d.campaign.slug}">Buat donasi baru</a>`);
-      $("#bukti").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; toast("Mengunggah bukti…");
-        try { await api(`public/donations/${id}/bukti`, { method: "POST", body: { gambar: await resizeImage(f, 1400) } }); toast("Bukti terkirim. Terima kasih!"); draw(await api("public/donations/" + id)); } catch (x) { toast(x.message); } };
+      const upx = $("#bukti");
+      upx.onchange = () => { const f = upx.files[0]; upx.value = ""; if (f) unggahBukti(id, f, async () => draw(await api("public/donations/" + id))); };
+      $$("#klaim, #klaim2").forEach((b) => b.onclick = async () => { b.disabled = true;
+        try { await api(`public/donations/${id}/klaim`, { method: "POST" }); toast("Terima kasih, admin akan mencocokkan transfer Anda."); draw(await api("public/donations/" + id)); } catch (x) { b.disabled = false; toast(x.message); } });
       return;
     }
     if (d.status !== "pending") {
@@ -643,15 +701,22 @@ route(/^#\/(?:bayar|kuitansi)\/(\w+)$/, async (id) => {
       <div style="margin-top:12px">${body}</div>
       ${manual ? `<div class="sec"><h2>${d.ada_bukti ? "Bukti terkirim" : "Langkah terakhir: unggah bukti"}</h2></div>
         ${d.ada_bukti ? `<div class="info">${ic("check", 20)}<span>Bukti transfer sudah kami terima. Admin akan memverifikasi, lalu kuitansi dikirim ke WhatsApp Anda.</span></div>`
-        : `<label class="upload wajib" for="bukti">${ic("upload", 24)}<br><b style="color:var(--ink)">Unggah bukti transfer</b><br>Foto atau tangkapan layar struk/mutasi<input type="file" id="bukti" accept="image/*"></label>
-        <div class="hint"><b>Donasi Anda baru tercatat setelah bukti diunggah.</b> Batas unggah 24 jam sejak donasi dibuat. Kuitansi dikirim ke WhatsApp setelah admin memverifikasi.</div>`}` : ""}
+        : `${d.ada_klaim ? `<div class="info">${ic("check", 20)}<span>Konfirmasi Anda sudah kami terima. Admin akan mencocokkan transfer <b>${tot}</b> dengan mutasi rekening, lalu kuitansi dikirim ke WhatsApp Anda. Bila sempat, unggah bukti di bawah untuk mempercepat.</span></div>` : ""}
+        <label class="upload wajib" for="bukti">${ic("upload", 24)}<br><b style="color:var(--ink)">Unggah bukti transfer</b><br>Foto atau tangkapan layar struk/mutasi<input type="file" id="bukti" accept="image/*"></label>
+        ${buktiGagalBox()}
+        ${d.ada_klaim ? "" : `<div class="hint"><b>Donasi Anda baru tercatat setelah bukti diunggah</b> atau Anda menekan "Saya sudah transfer". Batas 24 jam sejak donasi dibuat. Kuitansi dikirim ke WhatsApp setelah admin memverifikasi.</div>
+        <button class="btn ghost block" style="margin-top:10px" id="klaim">${ic("check", 18)} Saya sudah transfer, bukti tidak bisa diunggah</button>`}`}` : ""}
       <div class="info">${ic("shield", 20)}<span>Pastikan penerima atas nama <b>Wahdah Inspirasi Zakat</b>. WIZ tidak pernah meminta transfer ke rekening pribadi.</span></div>
       ${kontakAdmin(`Assalamu'alaikum admin WIZ ${CFG.cabang}, saya sudah ${d.metode === "qris" ? "membayar lewat QRIS" : "transfer"} ${tot} untuk "${d.campaign.judul}" (No. ${d.id}). Berikut bukti transfernya:`)}
       <button class="btn ghost block" style="margin-top:12px" id="cek">${ic("repeat", 18)} Cek status</button>`);
     $("#cek").onclick = async () => { const n = await api(`public/donations/${id}/check`, { method: "POST" }); if (n.status !== "pending") draw(n); else toast("Belum terkonfirmasi. Status diperiksa otomatis."); };
     const up = $("#bukti");
-    if (up) up.onchange = async () => { const f = up.files[0]; if (!f) return; toast("Mengunggah bukti…");
-      try { await api(`public/donations/${id}/bukti`, { method: "POST", body: { gambar: await resizeImage(f, 1400) } }); toast("Bukti terkirim. Terima kasih!"); draw(await api("public/donations/" + id)); } catch (x) { toast(x.message); } };
+    if (up) up.onchange = () => { const f = up.files[0]; up.value = ""; if (f) unggahBukti(id, f, async () => draw(await api("public/donations/" + id))); };
+    $$("#klaim, #klaim2").forEach((b) => b.onclick = async () => {
+      b.disabled = true;
+      try { await api(`public/donations/${id}/klaim`, { method: "POST" }); toast("Terima kasih, admin akan mencocokkan transfer Anda."); draw(await api("public/donations/" + id)); }
+      catch (x) { b.disabled = false; toast(x.message); }
+    });
   };
   const d = await api("public/donations/" + id);
   const ids = store.get("riwayat", []); if (!ids.includes(id)) { ids.push(id); store.set("riwayat", ids.slice(-100)); }
@@ -660,6 +725,10 @@ route(/^#\/(?:bayar|kuitansi)\/(\w+)$/, async (id) => {
     try { const n = await api(`public/donations/${id}/check`, { method: "POST" }); if (n.status !== "pending") { clearInterval(payTimer); draw(n); } } catch {}
   }, d.metode === "gateway" ? 5000 : 15000);
 });
+// Kotak saat unggah gagal: penyebab + jalan keluar
+const buktiGagalBox = () => `<div class="bukti-err" id="bukti_err" hidden><b>Bukti belum terkirim</b><span></span>
+  <small>Tidak apa-apa. Tekan tombol di bawah, admin akan mencocokkan transfer Anda lewat nominal unik. Atau kirim foto bukti lewat WhatsApp admin.</small>
+  <button class="btn primary block" id="klaim2">${ic("check", 18)} Saya sudah transfer</button></div>`;
 function receipt(d) {
   return `<div class="receipt">
     <div class="rr"><span>No. transaksi</span><b>${esc(d.id)}</b></div>

@@ -133,3 +133,28 @@ await call("GET", "admin/donations", null, adm);
 ok((await riwayat()).filter((x) => x.judul === "Pengingat bukti transfer" && x.wa === "6281355550004").length === 1, "pengingat hanya sekali");
 const dd = (await call("GET", "admin/donations?status=tanpa_bukti", null, adm)).data.rows.find((x) => x.id === ingat);
 ok(dd && dd.ingat_at, "admin melihat waktu pengingat terkirim");
+
+// Unggah bukti gagal → donatur menekan "Saya sudah transfer"
+r = await call("POST", "public/donations", { campaign: camp.slug, nominal: 40000, nama: "Donatur Klaim", wa: "081355550005", metode: "transfer", ref: kode });
+const kl = r.data.id;
+let frm = (await call("GET", "fr/me", null, frc)).data;
+ok(!frm.recent.some((x) => x.total === r.data.total && /Donatur/.test(x.nama)), "afiliator: donasi tanpa bukti/konfirmasi belum tampil di portal");
+await call("POST", `public/donations/${kl}/bukti-gagal`, { alasan: "Koneksi internet terputus saat mengunggah. [image/jpeg, 3200 KB]" });
+r = await call("POST", `public/donations/${kl}/klaim`, {});
+ok(r.s === 200, "donatur menekan 'Saya sudah transfer'");
+dl = (await call("GET", "admin/donations", null, adm)).data;
+const kd = dl.rows.find((x) => x.id === kl);
+ok(kd && kd.klaim_at && /terputus/.test(kd.bukti_gagal || ""), "donasi tampil di admin dengan tanda konfirmasi & penyebab gagal unggah");
+rows = await riwayat();
+const ka = rows.find((x) => x.judul === "Info admin: konfirmasi tanpa bukti" && x.pesan.includes(kl));
+ok(ka && /SUDAH TRANSFER/.test(ka.pesan) && /Cocokkan mutasi/.test(ka.pesan) && /terputus/.test(ka.pesan) && ka.pesan.includes(`/admin#donasi?id=${kl}`), "admin menerima WA: cocokkan mutasi + kendala + tautan");
+ok(rows.some((x) => x.judul === "Info afiliator: donasi baru" && x.wa === "6281355550001" && /menyatakan sudah transfer/.test(x.pesan)), "afiliator dikabari setelah donatur konfirmasi");
+frm = (await call("GET", "fr/me", null, frc)).data;
+ok(frm.recent.some((x) => x.status === "pending" && /Donatur/.test(x.nama)), "afiliator: setelah konfirmasi tampil sebagai menunggu verifikasi");
+const nk = rows.filter((x) => /Info admin/.test(x.judul) && x.pesan.includes(kl)).length;
+await call("POST", `public/donations/${kl}/klaim`, {});
+await call("POST", `public/donations/${kl}/bukti`, { gambar: png });
+ok((await riwayat()).filter((x) => /Info admin/.test(x.judul) && x.pesan.includes(kl)).length === nk, "konfirmasi ulang / bukti menyusul tidak mengirim WA ganda");
+await fetch(HOST + "/__sql", { method: "POST", body: JSON.stringify({ sql: "UPDATE donations SET created_at=datetime('now','-30 hours'), bukti_id=NULL WHERE id=?", args: [kl] }) });
+await call("GET", "admin/donations", null, adm);
+ok((await call("GET", "public/donations/" + kl)).data.status === "pending", "donasi yang sudah dikonfirmasi tidak ikut kedaluwarsa");

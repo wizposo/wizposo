@@ -59,12 +59,21 @@ async function api(path, opt = {}) {
   if (!r.ok) throw new Error(data.error || "Gagal terhubung ke server.");
   return data;
 }
-async function resizeImage(file, max = 1600) {
-  const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = URL.createObjectURL(file); });
-  const s = Math.min(1, max / Math.max(img.width, img.height)); const c = document.createElement("canvas");
-  c.width = Math.round(img.width * s); c.height = Math.round(img.height * s); c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-  let q = 0.85, out = c.toDataURL("image/webp", q); while (out.length > 850000 && q > 0.4) { q -= 0.1; out = c.toDataURL("image/webp", q); }
-  return out.startsWith("data:image/webp") ? out : c.toDataURL("image/jpeg", 0.8);
+async function resizeImage(file, max = 1600, batas = 850000) {
+  let img = null;
+  if (window.createImageBitmap) { try { img = await createImageBitmap(file, { imageOrientation: "from-image" }); } catch {} }
+  if (!img) img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error(/hei[cf]/i.test((file.type || "") + file.name) ? "Format HEIC belum didukung. Pakai JPG/PNG atau tangkapan layar." : "Gambar tidak bisa dibaca.")); i.src = URL.createObjectURL(file); });
+  let s = Math.min(1, max / Math.max(img.width, img.height));
+  for (let coba = 0; coba < 5; coba++) {
+    const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(img.width * s)); c.height = Math.max(1, Math.round(img.height * s));
+    const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+    let fmt = "image/webp", q = 0.85, out = c.toDataURL(fmt, q);
+    if (!out.startsWith("data:image/webp")) { fmt = "image/jpeg"; out = c.toDataURL(fmt, q); }
+    while (out.length > batas && q > 0.45) { q -= 0.1; out = c.toDataURL(fmt, q); }
+    if (out.length <= batas) { img.close?.(); return out; }
+    s *= 0.72;
+  }
+  throw new Error("Gambar terlalu besar.");
 }
 const field = (id, label, val = "", opt = {}) => `<div class="${opt.full ? "full" : ""}"><label class="f" for="${id}">${label}</label><div class="inp">${opt.pre ? `<span>${opt.pre}</span>` : ""}${opt.area
   ? `<textarea id="${id}" rows="${opt.rows || 3}" placeholder="${esc(opt.ph || "")}">${esc(val)}</textarea>`
@@ -250,7 +259,7 @@ VIEWS.donasi = async () => {
       ${r.rows.map((d) => `<tr class="click" data-id="${d.id}"><td>${tgl(d.paid_at || d.created_at)}<small>${esc(d.id)}</small></td>
         <td>${esc(d.anonim ? "Hamba Allah" : d.nama || "-")}${d.anonim && d.nama ? ` <small>(${esc(d.nama)})</small>` : ""}<small>${d.wa ? "+" + d.wa : ""}${d.fundraiser ? " · via " + esc(d.fundraiser) : ""}</small></td>
         <td>${esc(d.program || "-")}<small>${esc(d.jenis_dana)}${d.kotak_kode ? " · " + esc(d.kotak_kode) : ""}${d.pundi_kode ? " · " + esc(d.pundi_kode) : ""}</small></td>
-        <td>${METODE[d.metode] || d.metode}${d.bukti_id ? `<small style="color:var(--orange-t)">ada bukti</small>` : ""}</td><td class="num">${rp(d.total)}</td>
+        <td>${METODE[d.metode] || d.metode}${d.bukti_id ? `<small style="color:var(--orange-t)">ada bukti</small>` : d.klaim_at ? `<small style="color:var(--orange-t)">sudah transfer (tanpa bukti)</small>` : ""}</td><td class="num">${rp(d.total)}</td>
         <td><span class="tag st-${d.status}">${STATUS[d.status]}</span></td>
         <td>${d.status === "pending" && d.metode !== "gateway" && can("keuangan") ? `<button class="btn green xs" data-pay="${d.id}">Tandai lunas</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="7" class="hint" style="text-align:center;padding:30px">Tidak ada transaksi untuk filter ini.</td></tr>`}</tbody></table>`;
     const pages = Math.ceil(r.total / 50);
@@ -274,7 +283,7 @@ function donDetail(d, after) {
   modal("Detail donasi", `<div class="receipt" style="box-shadow:none;border:1px solid var(--line)">
       ${row("No. transaksi", esc(d.id))}${row("Status", `<span class="tag st-${d.status}">${STATUS[d.status]}</span>`)}${row("Program", esc(d.program))}${row("Jenis dana", esc(d.jenis_dana))}
       ${row("Nominal", rp(d.nominal))}${d.kode_unik ? row("Kode unik", rp(d.kode_unik)) : ""}${row("Total", "<b>" + rp(d.total) + "</b>")}${row("Metode", METODE[d.metode])}
-      ${row("Donatur", esc(((d.sapaan || "") + " " + (d.nama || "")).trim() || "-") + (d.anonim ? " (sembunyikan nama)" : ""))}${row("WhatsApp", d.wa ? `<a href="${waLink(d.wa)}" target="_blank" rel="noopener">+${d.wa}</a>` : "")}${d.ingat_at ? row("Pengingat bukti", "terkirim " + tglD(d.ingat_at)) : ""}
+      ${row("Donatur", esc(((d.sapaan || "") + " " + (d.nama || "")).trim() || "-") + (d.anonim ? " (sembunyikan nama)" : ""))}${row("WhatsApp", d.wa ? `<a href="${waLink(d.wa)}" target="_blank" rel="noopener">+${d.wa}</a>` : "")}${d.ingat_at ? row("Pengingat bukti", "terkirim " + tglD(d.ingat_at)) : ""}${d.klaim_at ? row("Konfirmasi donatur", `<b style="color:var(--orange-t)">Menyatakan sudah transfer</b> · ${tglD(d.klaim_at)}<br><small>Cocokkan mutasi dengan nominal ${rp(d.total)}</small>`) : ""}${d.bukti_gagal && !d.bukti_id ? row("Kendala unggah bukti", `<small>${esc(d.bukti_gagal)}</small>`) : ""}
       ${row("Fundraiser", esc(d.fundraiser))}${row("No. slip", d.slip_no ? `<a href="#slip?no=${esc(d.slip_no)}" onclick="closeModal()">${esc(d.slip_no)}</a>` : "")}${row("Uang", d.serah === "petugas" ? "Masih di petugas" : d.serah === "diterima" ? "Diterima " + esc(d.serah_oleh || "bendahara") : "")}${row("Kotak", esc(d.kotak_kode))}${row("Pundi", esc(d.pundi_kode))}${row("Petugas", esc(d.petugas))}${row("Doa", esc(d.doa))}${row("Catatan", esc(d.catatan))}
       ${row("Dibuat", tgl(d.created_at))}${row("Lunas", d.paid_at ? tgl(d.paid_at) : "")}</div>
     ${d.bukti_id ? `<div class="sect">Bukti transfer</div><a href="/api/admin/media/${d.bukti_id}" target="_blank" rel="noopener"><img src="/api/admin/media/${d.bukti_id}" alt="Bukti transfer" style="max-height:340px;border-radius:12px;border:1px solid var(--line)"></a>` : ""}`,

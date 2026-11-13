@@ -341,3 +341,9 @@ header.top .more svg{width:22px;height:22px;fill:currentColor}
 .kontak-admin{display:flex;align-items:center;gap:12px;margin-top:12px;padding:12px 14px;border-radius:14px;background:#e9f9ef;color:var(--ink);text-decoration:none;border:1px solid #bfe8cf}
 .kontak-admin>svg:first-child{color:#1faa59;flex:none}
 .kontak-admin span{flex:1;min-width:0}.kontak-admin b{display:block;font-size:14px}.kontak-admin small{color:var(--muted);font-size:12.5px}
+
+.upload.proses{opacity:.75;pointer-events:none;animation:kedip 1.2s infinite}
+@keyframes kedip{50%{opacity:.5}}
+.bukti-err{margin-top:10px;padding:12px 14px;border-radius:14px;background:#fff1f0;border:1px solid #f5c2bd;display:flex;flex-direction:column;gap:6px}
+.bukti-err b{color:#b42318}.bukti-err span{font-size:14px}.bukti-err small{color:var(--muted);font-size:12.5px}
+.bukti-err .btn{margin-top:6px}
