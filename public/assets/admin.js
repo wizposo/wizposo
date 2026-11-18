@@ -284,20 +284,39 @@ function donDetail(d, after) {
       ${row("No. transaksi", esc(d.id))}${row("Status", `<span class="tag st-${d.status}">${STATUS[d.status]}</span>`)}${row("Program", esc(d.program))}${row("Jenis dana", esc(d.jenis_dana))}
       ${row("Nominal", rp(d.nominal))}${d.kode_unik ? row("Kode unik", rp(d.kode_unik)) : ""}${row("Total", "<b>" + rp(d.total) + "</b>")}${row("Metode", METODE[d.metode])}
       ${row("Donatur", esc(((d.sapaan || "") + " " + (d.nama || "")).trim() || "-") + (d.anonim ? " (sembunyikan nama)" : ""))}${row("WhatsApp", d.wa ? `<a href="${waLink(d.wa)}" target="_blank" rel="noopener">+${d.wa}</a>` : "")}${d.ingat_at ? row("Pengingat bukti", "terkirim " + tglD(d.ingat_at)) : ""}${d.klaim_at ? row("Konfirmasi donatur", `<b style="color:var(--orange-t)">Menyatakan sudah transfer</b> · ${tglD(d.klaim_at)}<br><small>Cocokkan mutasi dengan nominal ${rp(d.total)}</small>`) : ""}${d.bukti_gagal && !d.bukti_id ? row("Kendala unggah bukti", `<small>${esc(d.bukti_gagal)}</small>`) : ""}
-      ${row("Fundraiser", esc(d.fundraiser))}${row("No. slip", d.slip_no ? `<a href="#slip?no=${esc(d.slip_no)}" onclick="closeModal()">${esc(d.slip_no)}</a>` : "")}${row("Uang", d.serah === "petugas" ? "Masih di petugas" : d.serah === "diterima" ? "Diterima " + esc(d.serah_oleh || "bendahara") : "")}${row("Kotak", esc(d.kotak_kode))}${row("Pundi", esc(d.pundi_kode))}${row("Petugas", esc(d.petugas))}${row("Doa", esc(d.doa))}${row("Catatan", esc(d.catatan))}
+      ${row("Fundraiser", esc(d.fundraiser))}${d.komisi ? row("Komisi afiliator", rp(d.komisi)) : ""}${row("No. slip", d.slip_no ? `<a href="#slip?no=${esc(d.slip_no)}" onclick="closeModal()">${esc(d.slip_no)}</a>` : "")}${row("Uang", d.serah === "petugas" ? "Masih di petugas" : d.serah === "diterima" ? "Diterima " + esc(d.serah_oleh || "bendahara") : "")}${row("Kotak", esc(d.kotak_kode))}${row("Pundi", esc(d.pundi_kode))}${row("Petugas", esc(d.petugas))}${row("Doa", esc(d.doa))}${row("Catatan", esc(d.catatan))}
       ${row("Dibuat", tgl(d.created_at))}${row("Lunas", d.paid_at ? tgl(d.paid_at) : "")}</div>
     ${d.bukti_id ? `<div class="sect">Bukti transfer</div><a href="/api/admin/media/${d.bukti_id}" target="_blank" rel="noopener"><img src="/api/admin/media/${d.bukti_id}" alt="Bukti transfer" style="max-height:340px;border-radius:12px;border:1px solid var(--line)"></a>` : ""}`,
     (d.wa && ["pending", "expired"].includes(d.status) && d.kanal === "online" ? `<a class="btn ghost sm" target="_blank" rel="noopener" href="${waLink(d.wa, `Assalamu'alaikum ${[d.sapaan, d.nama].filter(Boolean).join(" ") || "Bapak/Ibu"}, kami admin WIZ. Terkait donasi Anda ${rp(d.total)} untuk "${d.program || "Donasi"}" (No. ${d.id}), ${d.bukti_id ? "bukti transfer sudah kami terima dan sedang kami cek." : "apakah sudah ditransfer? Bila sudah, mohon kirim foto bukti transfernya di sini atau unggah di " + location.origin + "/#/bayar/" + d.id + " . Jazakallahu khairan."}`)}">${ic("wa")} Hubungi donatur</a>` : "") +
     (!can("keuangan") ? "" : `${d.status === "paid" && d.wa && !d.slip_no ? `<button class="btn ghost sm" id="rs">${ic("wa")} Kirim ulang kuitansi</button>` : ""}
      ${d.status === "pending" ? `<button class="btn danger sm" id="cx">Batalkan</button>${d.metode !== "gateway" ? `<button class="btn green sm" id="pd">${ic("check")} Tandai lunas</button>` : ""}` : ""}
-     ${d.status === "cancelled" ? `<button class="btn ghost sm" id="rp">Kembalikan ke menunggu</button>` : ""}
-     ${["pending", "cancelled", "failed", "expired"].includes(d.status) ? `<button class="btn ghost sm" id="hp" style="color:var(--danger)">Hapus</button>` : ""}`));
+     ${d.status === "paid" && !d.slip_no ? `<button class="btn danger sm" id="cx">Batalkan donasi</button>` : ""}
+     ${d.status === "paid" && d.slip_no ? `<button class="btn danger sm" id="cs">Batalkan slip ${esc(d.slip_no)}</button>` : ""}
+     ${d.status === "cancelled" && !d.slip_no ? `<button class="btn ghost sm" id="rp">Kembalikan ke menunggu</button>` : ""}
+     ${!(d.status === "paid" && d.slip_no) ? `<button class="btn ghost sm" id="hp" style="color:var(--danger)">Hapus</button>` : ""}`));
   $("#pd")?.addEventListener("click", () => setStatus(d.id, "paid", after));
-  $("#cx")?.addEventListener("click", () => setStatus(d.id, "cancelled", after));
   $("#rp")?.addEventListener("click", () => setStatus(d.id, "pending", after));
+  // Dampak pembatalan donasi lunas, ditampilkan sebelum admin mengonfirmasi
+  const dampak = () => d.status !== "paid" ? "" : `<div class="sect">Yang ikut dikoreksi</div><ul style="margin:6px 0 0 18px;line-height:1.6">
+      <li>Terkumpul program <b>${esc(d.program || "-")}</b> berkurang ${rp(d.total)}</li>
+      <li>Tidak lagi dihitung di laporan &amp; statistik donasi masuk</li>
+      ${d.fundraiser ? `<li>Donasi masuk afiliator <b>${esc(d.fundraiser)}</b> dibatalkan${d.komisi ? `, komisinya <b>${rp(d.komisi)}</b> ikut dibatalkan` : ""}. Afiliator dikabari lewat WhatsApp.</li>
+      ${d.komisi ? `<li><small>Bila komisi itu sudah ditarik, selisihnya otomatis dipotong dari komisi berikutnya.</small></li>` : ""}` : ""}
+      ${d.slip_no ? `<li>Slip ${esc(d.slip_no)} beserta upah ZISKO/relawan dari slip itu dibatalkan</li>` : ""}</ul>`;
+  const alasanF = `<div class="fg" style="margin-top:12px">${field("bt_alasan", "Alasan", "", { full: true, ph: "mis. salah input, dobel, transfer tidak masuk" })}</div>`;
+  $("#cx")?.addEventListener("click", () => {
+    modal(d.status === "paid" ? "Batalkan donasi lunas" : "Batalkan donasi", `<p>Donasi <b>${esc(d.id)}</b> dari ${esc(d.nama || "Hamba Allah")} (${rp(d.total)}) akan dibatalkan. Riwayatnya tetap tersimpan dengan status Dibatalkan.</p>${dampak()}${alasanF}`,
+      `<button class="btn danger sm" id="cx_ok">Ya, batalkan</button>`);
+    $("#cx_ok").onclick = (e) => busy(e.target, async () => { const r = await api(`admin/donations/${d.id}/status`, { method: "POST", body: { status: "cancelled", alasan: val("bt_alasan") } }); closeModal(); toast(r.info || "Donasi dibatalkan"); after && after(); });
+  });
+  $("#cs")?.addEventListener("click", () => {
+    modal("Batalkan slip setoran", `<p>Donasi ini dicatat lewat slip <b>${esc(d.slip_no)}</b> (setoran ZISKO/relawan). Membatalkannya berarti membatalkan <b>seluruh slip</b>, termasuk semua baris donasi di slip itu.</p>${dampak()}${alasanF}`,
+      `<button class="btn danger sm" id="cs_ok">Ya, batalkan slip</button>`);
+    $("#cs_ok").onclick = (e) => busy(e.target, async () => { await api(`field/slips/${encodeURIComponent(d.slip_no)}/batal`, { method: "POST", body: { alasan: val("bt_alasan") || "dibatalkan admin" } }); closeModal(); toast("Slip & donasinya dibatalkan, upah petugas sudah dikoreksi"); after && after(); });
+  });
   $("#hp")?.addEventListener("click", () => {
-    modal("Hapus transaksi", `<p>Transaksi <b>${esc(d.id)}</b> (${rp(d.total)}) akan dihapus permanen dan tidak bisa dikembalikan. Gunakan Batalkan jika ingin riwayatnya tetap tercatat.</p>`, `<button class="btn danger sm" id="hp_ok">Ya, hapus permanen</button>`);
-    $("#hp_ok").onclick = (e) => busy(e.target, async () => { await api(`admin/donations/${d.id}`, { method: "DELETE" }); closeModal(); toast("Transaksi dihapus"); after && after(); }); });
+    modal("Hapus transaksi", `<p>Transaksi <b>${esc(d.id)}</b> (${rp(d.total)}) akan <b>dihapus permanen</b> dan tidak bisa dikembalikan.${d.status === "paid" ? " Pilih <b>Batalkan donasi</b> bila riwayatnya ingin tetap tercatat." : ""}</p>${dampak()}${d.status === "paid" ? alasanF : ""}`, `<button class="btn danger sm" id="hp_ok">Ya, hapus permanen</button>`);
+    $("#hp_ok").onclick = (e) => busy(e.target, async () => { const al = $("#bt_alasan") ? val("bt_alasan") : ""; const r = await api(`admin/donations/${d.id}${al ? "?alasan=" + encodeURIComponent(al) : ""}`, { method: "DELETE" }); closeModal(); toast(r.info || "Transaksi dihapus"); after && after(); }); });
   $("#rs")?.addEventListener("click", async () => { try { await api(`admin/donations/${d.id}/resend`, { method: "POST" }); toast("Kuitansi terkirim"); } catch (e) { mErr(e.message); } });
 }
 async function offlineForm(pre = {}) {
