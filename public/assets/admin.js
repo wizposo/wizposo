@@ -1098,8 +1098,8 @@ VIEWS.upah = async () => {
         <td style="white-space:nowrap">${t.status === "diajukan" ? `<button class="btn primary xs" data-ok="${t.id}" data-tipe="${t.tipe}">Setujui</button> <button class="btn ghost xs" data-no="${t.id}" data-tipe="${t.tipe}">Tolak</button>` : ""}</td></tr>`).join("")
         || `<tr><td colspan="6" class="hint" style="text-align:center;padding:24px">Tidak ada permintaan di daftar ini.</td></tr>`}</tbody></table></div>
       <p class="hint">Minimal penarikan ${rp(d.tarik_min)}. Setelah disetujui, catat sudah ditransfer agar saldo tercatat benar.</p></div>
-    <div class="panel" style="margin-top:16px"><h2>Saldo afiliator</h2><div class="tw"><table class="t"><thead><tr><th>Afiliator</th><th class="num">Komisi</th><th class="num">Donasi lunas</th><th class="num">Diperoleh</th><th class="num">Dibayar</th><th class="num">Menunggu</th><th class="num">Tersedia</th></tr></thead><tbody>
-      ${d.afiliator.map((f) => `<tr><td><b>${esc(f.nama)}</b><small class="mono">${esc(f.kode)}</small></td><td class="num">${f.persen}%</td><td class="num">${f.donasi}</td><td class="num">${rp(f.diperoleh)}</td><td class="num">${rp(f.dibayar)}</td><td class="num">${rp(f.diajukan)}</td><td class="num"><b>${rp(f.tersedia)}</b></td></tr>`).join("")
+    <div class="panel" style="margin-top:16px"><h2>Saldo afiliator</h2><div class="tw"><table class="t"><thead><tr><th>Afiliator</th><th class="num">Komisi</th><th class="num">Donasi lunas</th><th class="num">Sedekah</th><th class="num">Qurban</th><th class="num">Dibayar</th><th class="num">Menunggu</th><th class="num">Tersedia</th></tr></thead><tbody>
+      ${d.afiliator.map((f) => `<tr><td><b>${esc(f.nama)}</b><small class="mono">${esc(f.kode)}</small></td><td class="num">${f.persen}%</td><td class="num">${f.donasi}</td><td class="num">${rp(f.komisi_sedekah || 0)}</td><td class="num">${rp(f.komisi_qurban || 0)}<small class="mono">${f.qurban_lunas || 0} lunas</small></td><td class="num">${rp(f.dibayar)}</td><td class="num">${rp(f.diajukan)}</td><td class="num"><b>${rp(f.tersedia)}</b></td></tr>`).join("")
         || `<tr><td colspan="7" class="hint" style="text-align:center;padding:24px">Belum ada afiliator.</td></tr>`}</tbody></table></div>
       <p class="hint">Komisi hanya dihitung dari donasi infak dan sedekah, tidak dari zakat.</p></div>
     <div class="panel" style="margin-top:16px"><h2>Setoran & upah petugas</h2><div class="tw"><table class="t"><thead><tr><th>Petugas</th><th>Peran</th><th class="num">Persen</th><th class="num">Slip</th><th class="num">Total setoran</th><th class="num">Upah</th><th class="num">Dibayar</th><th class="num">Tersedia</th></tr></thead><tbody>
@@ -1191,6 +1191,7 @@ VIEWS.pengaturan = async () => {
       <div class="panel"><h2>Profil cabang</h2><div class="fg">${field("s_cabang", "Nama cabang", s.cabang)}${field("s_min", "Minimal donasi", s.min_donasi, { pre: "Rp", num: true })}${field("s_tag", "Tagline", s.tagline, { full: true })}</div></div>
       <div class="panel" style="margin-top:16px"><h2>Kontak WhatsApp</h2><div class="fg">${field("s_wa_admin", "Admin & konsultasi zakat", wa0(s.wa_admin), { pre: "+62", num: true, hint: "Juga menerima notifikasi donasi masuk." })}
         ${field("s_wa_amb", "Layanan ambulans", wa0(s.wa_ambulans), { pre: "+62", num: true })}${field("s_wa_pundi", "Koordinator pundi", wa0(s.wa_pundi), { pre: "+62", num: true })}</div></div>
+      <div class="panel" style="margin-top:16px"><h2>Mengapa titip di WIZ</h2><p class="hint" style="margin-top:0">Kategori ini tampil di beranda. Klik kartu untuk melihat penjelasan dan foto.</p><div id="trust_host"></div></div>
       <div class="panel" style="margin-top:16px"><h2>Rekening & QRIS cabang</h2><p class="hint" style="margin-top:0">Hanya rekening resmi atas nama lembaga. Kosongkan baris yang tidak dipakai.</p>
         ${rek.map((r, i) => `<div class="fg">${field("r_bank" + i, "Bank", r.bank || "")}${field("r_no" + i, "Nomor rekening", r.no || "", { num: true })}${field("r_an" + i, "Atas nama", r.an || "Wahdah Inspirasi Zakat", { full: true })}</div>`).join("<hr style='border:0;border-top:1px dashed var(--line);margin:12px 0'>")}
         <label class="f">Gambar QRIS statis (opsional)</label><label class="cover-prev" style="aspect-ratio:1;max-width:220px;cursor:pointer" for="qr_f" id="qr_p">${qrisId ? `<img src="/api/media/${qrisId}" alt="QRIS">` : `<span>${ic("plus", 24)}<br>Unggah QRIS</span>`}</label><input type="file" id="qr_f" accept="image/*" hidden>
@@ -1227,6 +1228,7 @@ VIEWS.pengaturan = async () => {
         <button class="btn ghost sm" style="margin-top:8px" id="add_a">${ic("plus")} Tambah pengguna</button> <button class="btn ghost sm" style="margin-top:8px" onclick="location.hash='#akun'">Akun saya</button></div>
     </div></div>`);
   bindMoney("s_min", "s_emas", "s_beras");
+  trustEditor(s.trust_items, s.cabang);
   $("#qr_f").onchange = async () => { const f = $("#qr_f").files[0]; if (!f) return; try { const data = await resizeImage(f, 1000); qrisId = (await api("admin/media", { method: "POST", body: { gambar: data } })).id; $("#qr_p").innerHTML = `<img src="${data}" alt="QRIS">`; toast("QRIS diunggah. Klik Simpan."); } catch (e) { toast(e.message); } };
   $("#qr_x")?.addEventListener("click", () => { qrisId = null; $("#qr_p").innerHTML = `<span>QRIS dihapus. Klik Simpan.</span>`; });
   $("#save").onclick = async (e) => {
@@ -1443,4 +1445,44 @@ function jemputKpi(d) {
   if (!aktif && !d.kas?.total) return "";
   return `<a class="kpi ${j.terlambat ? "warn" : ""}" href="#peta"><small>Jemput bulan ini</small><b>${j.dijemput || 0}/${aktif}</b><span>${j.terlambat || 0} terlambat · ${j.segera || 0} segera · lihat peta</span></a>
     <a class="kpi ${d.kas?.total ? "warn" : ""}" href="#slip?tab=setoran"><small>Uang masih di petugas</small><b>${rpk(d.kas?.total || 0)}</b><span>${d.kas?.slip || 0} slip · ${d.kas?.petugas || 0} petugas</span></a>`;
+}
+
+/* ---------- Mengapa titip di WIZ: kategori yang bisa diatur admin (dengan foto) ---------- */
+const TRUST_IKON = ["heart", "shield", "scale", "bolt", "trophy"];
+function trustEditor(items, cabang) {
+  const DEF = [
+    { judul: "Untuk " + cabang, ikon: "heart", ringkas: "Seluruh donasi di aplikasi ini disalurkan di wilayah " + cabang, teks: "Donasi Anda disalurkan langsung di wilayah " + cabang + "." },
+    { judul: "LAZNAS resmi", ikon: "shield", ringkas: "SK Kemenag RI No. 1209/2024", teks: "Wahdah Inspirasi Zakat adalah LAZNAS resmi, sesuai SK Kemenag RI No. 1209/2024." },
+    { judul: "Dana terpisah", ikon: "scale", ringkas: "Zakat, infak, dan fidyah dicatat terpisah", teks: "Zakat, infak, sedekah, dan fidyah dicatat di pos masing-masing dan tidak bercampur." },
+    { judul: "Kuitansi otomatis", ikon: "bolt", ringkas: "Bukti dan kabar penyaluran dikirim ke WhatsApp", teks: "Setiap donasi lunas otomatis diterbitkan kuitansinya dan dikirim ke WhatsApp Anda." },
+  ];
+  let TR = (items && items.length ? items : DEF).map((t) => ({ ...t }));
+  const snap = () => TR.forEach((t, i) => { t.judul = val("tj" + i); t.ikon = val("ti" + i); t.ringkas = val("tr" + i); t.teks = val("tt" + i); });
+  const draw = () => {
+    $("#trust_host").innerHTML = `${TR.map((t, i) => `<div style="display:grid;gap:8px;padding:12px 0;border-top:1px solid var(--line)">
+      <div class="fg">${field("tj" + i, "Judul kategori", t.judul || "")}${field("ti" + i, "Ikon", t.ikon || "heart", { sel: TRUST_IKON.map((x) => [x, x]) })}${field("tr" + i, "Keterangan singkat (tampil di kartu)", t.ringkas || "", { full: true })}${field("tt" + i, "Penjelasan saat diklik", t.teks || "", { area: true, rows: 4, full: true, hint: "Pisahkan paragraf dengan baris kosong." })}</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        ${t.gambar_id ? `<img src="/api/media/${t.gambar_id}" alt="" style="width:120px;aspect-ratio:16/9;object-fit:cover;border-radius:8px;border:1px solid var(--line)">` : `<span class="hint">Tanpa foto</span>`}
+        <label class="btn ghost sm" style="cursor:pointer">${ic("plus")} ${t.gambar_id ? "Ganti foto" : "Unggah foto"}<input type="file" accept="image/*" data-tf="${i}" hidden></label>
+        ${t.gambar_id ? `<button type="button" class="btn ghost sm" data-tfx="${i}">Hapus foto</button>` : ""}
+        <button type="button" class="btn ghost sm" data-td="${i}" style="margin-left:auto">Hapus kategori</button>
+      </div></div>`).join("")}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      <button type="button" class="btn ghost sm" id="t_add">${ic("plus")} Tambah kategori</button>
+      <button type="button" class="btn primary sm" id="t_save">Simpan kategori</button></div>`;
+    document.querySelectorAll("[data-tf]").forEach((el) => el.onchange = async (e) => {
+      const f = e.target.files[0]; if (!f) return; snap();
+      try { const data = await resizeImage(f, 1200); TR[+el.dataset.tf].gambar_id = (await api("admin/media", { method: "POST", body: { gambar: data } })).id; draw(); toast("Foto diunggah. Klik Simpan kategori."); }
+      catch (ex) { toast(ex.message); }
+    });
+    document.querySelectorAll("[data-tfx]").forEach((el) => el.onclick = () => { snap(); TR[+el.dataset.tfx].gambar_id = null; draw(); });
+    document.querySelectorAll("[data-td]").forEach((el) => el.onclick = () => { snap(); TR.splice(+el.dataset.td, 1); draw(); });
+    $("#t_add").onclick = () => { snap(); if (TR.length >= 12) return toast("Maksimal 12 kategori."); TR.push({ judul: "", ikon: "heart", ringkas: "", teks: "" }); draw(); };
+    $("#t_save").onclick = (e) => busy(e.target, async () => {
+      snap(); const keep = TR.filter((t) => (t.judul || "").trim());
+      await api("admin/settings", { method: "PUT", body: { trust_items: keep } });
+      TR = keep.length ? keep : TR; draw(); toast("Kategori \"Mengapa titip di WIZ\" disimpan");
+    });
+  };
+  draw();
 }

@@ -281,19 +281,23 @@ route(/^#\/?$/, async () => {
     <div class="sec"><h2>Ajak lebih banyak orang</h2></div>
     <a class="joinfr" href="#/mitra"><span class="ib">${ic("trophy", 22)}</span><span><h3>Jadi fundraiser WIZ ${esc(CFG.cabang)}</h3><p>Dapatkan tautan ajakan pribadi, pantau hasilnya, dan raih pahala dari setiap kebaikan yang Anda ajak.</p></span></a>
     <div class="sec"><h2>Mengapa titip di WIZ?</h2></div>
-    <div class="trust">
-      <div class="t" data-trust="poso" style="cursor:pointer">${ic("heart")}<b>Untuk ${esc(CFG.cabang)}</b>Seluruh donasi di aplikasi ini disalurkan di wilayah ${esc(CFG.cabang)}</div>
-      <div class="t" data-trust="laznas" style="cursor:pointer">${ic("shield")}<b>LAZNAS resmi</b>SK Kemenag RI No. 1209/2024</div>
-      <div class="t">${ic("scale")}<b>Dana terpisah</b>Zakat, infak, dan fidyah dicatat terpisah</div>
-      <div class="t">${ic("bolt")}<b>Kuitansi otomatis</b>Bukti dan kabar penyaluran dikirim ke WhatsApp</div>
-    </div>
+    <div class="trust" id="trustHome"></div>
     <div id="trustDetail" class="card" hidden style="margin-top:10px"></div>
     <footer class="foot">Wahdah Inspirasi Zakat (WIZ) Cabang ${esc(CFG.cabang)}<br>Dana yang didonasikan bukan bersumber dan bukan untuk tujuan pencucian uang, terorisme, maupun tindak kejahatan lainnya.</footer>`);
-  const TRUST = {
-    poso: `<img src="/assets/poso.jpg" alt="Penyaluran WIZ ${esc(CFG.cabang)}" style="width:100%;border-radius:10px" onerror="this.outerHTML='<p>Foto penyaluran belum tersedia.</p>'"><p class="hint" style="margin:8px 0 0">Donasi Anda disalurkan langsung di wilayah ${esc(CFG.cabang)}.</p>`,
-    laznas: `<b>Dana terpisah</b><p style="margin:4px 0 10px">Zakat, infak, sedekah, dan fidyah dicatat di pos masing-masing dan tidak bercampur.</p><b>Kuitansi otomatis</b><p style="margin:4px 0 0">Setiap donasi lunas otomatis diterbitkan kuitansinya dan dikirim ke WhatsApp Anda.</p>`,
-  };
-  document.querySelectorAll(".trust [data-trust]").forEach((el) => el.onclick = () => { const d = $("#trustDetail"); d.innerHTML = TRUST[el.dataset.trust]; d.hidden = false; });
+  const TRUST_DEF = [
+    { judul: "Untuk " + CFG.cabang, ikon: "heart", ringkas: "Seluruh donasi di aplikasi ini disalurkan di wilayah " + CFG.cabang, teks: "Donasi Anda disalurkan langsung di wilayah " + CFG.cabang + "." },
+    { judul: "LAZNAS resmi", ikon: "shield", ringkas: "SK Kemenag RI No. 1209/2024", teks: "Wahdah Inspirasi Zakat adalah LAZNAS resmi, sesuai SK Kemenag RI No. 1209/2024." },
+    { judul: "Dana terpisah", ikon: "scale", ringkas: "Zakat, infak, dan fidyah dicatat terpisah", teks: "Zakat, infak, sedekah, dan fidyah dicatat di pos masing-masing dan tidak bercampur." },
+    { judul: "Kuitansi otomatis", ikon: "bolt", ringkas: "Bukti dan kabar penyaluran dikirim ke WhatsApp", teks: "Setiap donasi lunas otomatis diterbitkan kuitansinya dan dikirim ke WhatsApp Anda." },
+  ];
+  const TRUST = CFG.trust && CFG.trust.length ? CFG.trust : TRUST_DEF;
+  $("#trustHome").innerHTML = TRUST.map((t, i) => `<div class="t" data-trust="${i}" style="cursor:pointer">${ic(t.ikon || "heart")}<b>${esc(t.judul)}</b>${esc(t.ringkas || "")}</div>`).join("");
+  document.querySelectorAll("#trustHome [data-trust]").forEach((el) => el.onclick = () => {
+    const t = TRUST[Number(el.dataset.trust)], d = $("#trustDetail");
+    d.innerHTML = (t.gambar ? `<img src="${esc(t.gambar)}" alt="${esc(t.judul)}" style="width:100%;border-radius:10px;margin-bottom:10px" onerror="this.remove()">` : "")
+      + `<b>${esc(t.judul)}</b>` + (t.teks || "").split(/\n\s*\n/).filter(Boolean).map((x) => `<p style="margin:8px 0 0">${esc(x)}</p>`).join("");
+    d.hidden = false;
+  });
   drawJar($("#jarHome"), 0.62);
   const tick = async () => { try { const l = await api("public/live"); const t = $("#ticker"); if (t) t.innerHTML = tickerRows(l.recent.slice(0, 5)); } catch {} };
   tick(); liveTimer = setInterval(tick, 20000);
