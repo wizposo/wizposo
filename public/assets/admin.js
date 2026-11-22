@@ -592,7 +592,10 @@ function qbMusimForm(m) {
     ${field("qm_idul", "Tanggal Idul Adha", v.tanggal_idul_adha || "", { type: "date", hint: "Sesuai penetapan Kemenag." })}
     ${field("qm_batas", "Batas pelunasan (opsional)", v.batas_pelunasan || "", { type: "date", hint: "Kosongkan untuk otomatis 20 hari sebelum Idul Adha." })}
     ${field("qm_kambing", "Harga kambing (Rp)", String(v.harga_kambing || ""), { hint: "1 peserta = 1 ekor." })}
-    ${field("qm_sapi", "Harga sapi per bagian (Rp)", String(v.harga_sapi_bagian || ""), { hint: "1 sapi = 7 bagian." })}
+    ${field("qm_sapi", "Harga sapi per bagian – cadangan (Rp)", String(v.harga_sapi_bagian || ""), { hint: "Dipakai hanya jika kelas sapi di bawah tidak diisi." })}
+    ${field("qm_k_a", "Sapi kelas A – harga per bagian (Rp)", String(((v.kelas_sapi || []).find((x) => x.kode === "a") || {}).harga || ""), { hint: "Kosongkan kelas yang tidak dijual. 1 sapi = 7 bagian." })}
+    ${field("qm_k_b", "Sapi kelas B – harga per bagian (Rp)", String(((v.kelas_sapi || []).find((x) => x.kode === "b") || {}).harga || ""))}
+    ${field("qm_k_c", "Sapi kelas C – harga per bagian (Rp)", String(((v.kelas_sapi || []).find((x) => x.kode === "c") || {}).harga || ""))}
     ${field("qm_min", "Setoran minimal (Rp)", String(v.min_setoran || 50000))}
     ${field("qm_kuota", "Kuota peserta", String(v.kuota || 0), { hint: "0 = tanpa batas." })}
     ${field("qm_kom", "Komisi afiliator (%)", v.komisi_persen != null ? String(v.komisi_persen) : "", { hint: "Kosongkan untuk memakai persen umum dari Pengaturan." })}
@@ -604,6 +607,7 @@ function qbMusimForm(m) {
     const komisi = val("qm_kom");
     await api("admin/qurban/musim", { method: "POST", body: { id: m ? m.id : null, tahun_hijriah: val("qm_thn"), tanggal_idul_adha: val("qm_idul"), batas_pelunasan: val("qm_batas"),
       harga_kambing: num(val("qm_kambing")), harga_sapi_bagian: num(val("qm_sapi")), min_setoran: num(val("qm_min")), kuota: num(val("qm_kuota")),
+      kelas_sapi: ["a", "b", "c"].map((kd) => ({ kode: kd, harga: num(val("qm_k_" + kd)) })).filter((k) => k.harga > 0),
       komisi_persen: komisi === "" ? null : komisi.replace(",", "."), status: val("qm_status"), catatan: val("qm_cat") } });
     closeModal(); toast("Musim qurban disimpan"); VIEWS.qurban();
   });

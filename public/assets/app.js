@@ -689,7 +689,7 @@ function qbRender() {
     </section>${qbNarasi(QB.halaman.narasi)}
     <div class="tiles" style="margin-top:12px">
       <div class="s"><small>Kambing</small><b>${rp(m.harga_kambing)}</b><small>1 ekor</small></div>
-      <div class="s"><small>Sapi</small><b>${rp(m.harga_sapi_bagian)}</b><small>per bagian · 7 bagian = 1 sapi</small></div>
+      ${m.kelas_sapi?.length ? m.kelas_sapi.map((k) => `<div class="s"><small>Sapi kelas ${esc(k.kode.toUpperCase())}</small><b>${rp(k.harga)}</b><small>per bagian · 7 bagian = 1 sapi</small></div>`).join("") : `<div class="s"><small>Sapi</small><b>${rp(m.harga_sapi_bagian)}</b><small>per bagian · 7 bagian = 1 sapi</small></div>`}
     </div>
     <div class="seg" style="margin-top:14px">
       <button class="${QB.tab === "daftar" ? "on" : ""}" data-qb="daftar">Daftar qurban</button>
@@ -728,8 +728,10 @@ function qbFormDaftar() {
       <label class="seg"><input type="radio" name="qb_jenis" value="kambing" checked> Kambing (1 ekor)</label>
       <label class="seg"><input type="radio" name="qb_jenis" value="sapi"> Sapi (bagian)</label>
     </div>
-    <div id="qb_bagian_wrap" hidden><label class="f" for="qb_bagian">Jumlah bagian sapi</label>
-      <div class="inp"><select id="qb_bagian">${[1, 2, 3, 4, 5, 6, 7].map((i) => `<option value="${i}">${i} bagian · ${rp(i * m.harga_sapi_bagian)}${i === 7 ? " (1 sapi utuh)" : ""}</option>`).join("")}</select></div></div>
+    <div id="qb_bagian_wrap" hidden>${m.kelas_sapi?.length ? `<label class="f" for="qb_kelas">Kategori sapi</label>
+      <div class="inp"><select id="qb_kelas">${m.kelas_sapi.map((k) => `<option value="${esc(k.kode)}">Kelas ${esc(k.kode.toUpperCase())} · ${rp(k.harga)} per bagian</option>`).join("")}</select></div>` : ""}
+      <label class="f" for="qb_bagian">Jumlah bagian sapi</label>
+      <div class="inp"><select id="qb_bagian"></select></div></div>
     <label class="f" for="qb_nama">Nama peserta</label><div class="inp"><input id="qb_nama" autocomplete="name"></div>
     <label class="f" for="qb_atas">Atas nama qurban <small>(opsional)</small></label><div class="inp"><input id="qb_atas" placeholder="Kosongkan jika sama dengan nama"></div>
     <label class="f" for="qb_wa">Nomor WhatsApp</label><div class="inp"><input id="qb_wa" inputmode="tel" placeholder="0812 3456 7890"></div>
@@ -739,12 +741,19 @@ function qbFormDaftar() {
     <div class="err" id="qb_err" hidden></div>
     <button class="btn primary block" type="submit">Daftar qurban</button>
   </form>`;
+  const qbIsiBagian = () => {
+    const k = m.kelas_sapi?.length ? m.kelas_sapi.find((x) => x.kode === $("#qb_kelas")?.value) : null;
+    const h = k ? k.harga : m.harga_sapi_bagian;
+    $("#qb_bagian").innerHTML = [1, 2, 3, 4, 5, 6, 7].map((i) => `<option value="${i}">${i} bagian · ${rp(i * h)}${i === 7 ? " (1 sapi utuh)" : ""}</option>`).join("");
+  };
+  qbIsiBagian();
+  if ($("#qb_kelas")) $("#qb_kelas").onchange = qbIsiBagian;
   document.querySelectorAll('input[name="qb_jenis"]').forEach((r) => r.onchange = () => { $("#qb_bagian_wrap").hidden = document.querySelector('input[name="qb_jenis"]:checked').value !== "sapi"; });
   $("#qb_daftar").onsubmit = async (e) => {
     e.preventDefault();
     const btn = e.target.querySelector("button[type=submit]"), err = $("#qb_err");
     const jenis = document.querySelector('input[name="qb_jenis"]:checked').value;
-    const body = { jenis, bagian: jenis === "sapi" ? Number($("#qb_bagian").value) : 1, nama: $("#qb_nama").value.trim(), atas_nama: $("#qb_atas").value.trim(), wa: $("#qb_wa").value.trim(), kota: $("#qb_kota").value.trim(), pengingat_tgl: Number($("#qb_tgl").value), ref: refNow() };
+    const body = { jenis, kelas: jenis === "sapi" && $("#qb_kelas") ? $("#qb_kelas").value : null, bagian: jenis === "sapi" ? Number($("#qb_bagian").value) : 1, nama: $("#qb_nama").value.trim(), atas_nama: $("#qb_atas").value.trim(), wa: $("#qb_wa").value.trim(), kota: $("#qb_kota").value.trim(), pengingat_tgl: Number($("#qb_tgl").value), ref: refNow() };
     err.hidden = true; btn.disabled = true; btn.textContent = "Mendaftarkan…";
     try {
       const r = await api("public/qurban/daftar", { method: "POST", body });
