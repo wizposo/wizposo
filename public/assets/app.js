@@ -654,6 +654,135 @@ route(/^#\/berita\/([\w-]+)$/, async (slug) => {
   document.body.appendChild(cta); $("#nav").hidden = true;
 });
 
+/* ---------- Tabungan qurban (publik) ---------- */
+const QB = { tab: "daftar", kode: "", wa: "", musim: null };
+const QB_STATUS = { daftar: ["Belum menabung", "warn"], cicil: ["Sedang menabung", "ok"], lunas: ["Lunas", "ok"], disembelih: ["Sudah disembelih", "ok"], dibagikan: ["Sudah dibagikan", "ok"], batal: ["Dibatalkan", "warn"] };
+const qbTgl = (s) => tgl(s, { day: "numeric", month: "long", year: "numeric" });
+const qbOpsiBulan = (sel = 1) => Array.from({ length: 28 }, (_, i) => `<option value="${i + 1}" ${i + 1 === sel ? "selected" : ""}>Tanggal ${i + 1}</option>`).join("");
+route(/^#\/qurban$/, async () => {
+  header("Tabungan Qurban", "#/"); nav("");
+  let d = { musim: null };
+  try { d = await api("public/qurban"); } catch {}
+  QB.musim = d.musim;
+  if (!d.musim) return view(`<section class="hero" style="padding:18px"><small>Tabungan qurban</small><h1 style="font-size:20px">Pendaftaran belum dibuka</h1>
+    <p style="margin:0">Pantau informasi terbaru dari WIZ Cabang ${esc(d.cabang || "")}.</p></section>`);
+  qbRender();
+});
+function qbRender() {
+  const m = QB.musim;
+  view(`<section class="hero" style="padding:18px">
+      <small>Idul Adha ${esc(m.tahun_hijriah)} · perkiraan ${qbTgl(m.tanggal_idul_adha)}</small>
+      <h1 style="font-size:22px">Tabungan Qurban WIZ</h1>
+      <p style="margin:0">Menabung sedikit demi sedikit sesuai kemampuan Anda. <b>Pelunasan paling lambat ${qbTgl(m.batas_pelunasan)}</b>${m.hari_ke_batas > 0 ? ` (${m.hari_ke_batas} hari lagi)` : ""}.</p>
+    </section>
+    <div class="tiles" style="margin-top:12px">
+      <div class="s"><small>Kambing</small><b>${rp(m.harga_kambing)}</b><small>1 ekor</small></div>
+      <div class="s"><small>Sapi</small><b>${rp(m.harga_sapi_bagian)}</b><small>per bagian · 7 bagian = 1 sapi</small></div>
+    </div>
+    <div class="seg" style="margin-top:14px">
+      <button class="${QB.tab === "daftar" ? "on" : ""}" data-qb="daftar">Daftar qurban</button>
+      <button class="${QB.tab === "cek" ? "on" : ""}" data-qb="cek">Cek tabungan saya</button>
+    </div>
+    <div id="qb_body" style="margin-top:12px"></div>`);
+  document.querySelectorAll("[data-qb]").forEach((b) => b.onclick = () => { QB.tab = b.dataset.qb; qbRender(); });
+  QB.tab === "daftar" ? qbFormDaftar() : qbFormCek();
+}
+function qbFormDaftar() {
+  const m = QB.musim;
+  $("#qb_body").innerHTML = `<form class="card" id="qb_daftar" novalidate style="display:grid;gap:10px">
+    <label class="f">Jenis qurban</label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <label class="seg"><input type="radio" name="qb_jenis" value="kambing" checked> Kambing (1 ekor)</label>
+      <label class="seg"><input type="radio" name="qb_jenis" value="sapi"> Sapi (bagian)</label>
+    </div>
+    <div id="qb_bagian_wrap" hidden><label class="f" for="qb_bagian">Jumlah bagian sapi</label>
+      <div class="inp"><select id="qb_bagian">${[1, 2, 3, 4, 5, 6, 7].map((i) => `<option value="${i}">${i} bagian · ${rp(i * m.harga_sapi_bagian)}${i === 7 ? " (1 sapi utuh)" : ""}</option>`).join("")}</select></div></div>
+    <label class="f" for="qb_nama">Nama peserta</label><div class="inp"><input id="qb_nama" autocomplete="name"></div>
+    <label class="f" for="qb_atas">Atas nama qurban <small>(opsional)</small></label><div class="inp"><input id="qb_atas" placeholder="Kosongkan jika sama dengan nama"></div>
+    <label class="f" for="qb_wa">Nomor WhatsApp</label><div class="inp"><input id="qb_wa" inputmode="tel" placeholder="0812 3456 7890"></div>
+    <div class="hint">Wajib, untuk pengingat tabungan dan kuitansi.</div>
+    <label class="f" for="qb_kota">Kota / kecamatan</label><div class="inp"><input id="qb_kota"></div>
+    <label class="f" for="qb_tgl">Tanggal pengingat setiap bulan</label><div class="inp"><select id="qb_tgl">${qbOpsiBulan(1)}</select></div>
+    <div class="err" id="qb_err" hidden></div>
+    <button class="btn primary block" type="submit">Daftar qurban</button>
+  </form>`;
+  document.querySelectorAll('input[name="qb_jenis"]').forEach((r) => r.onchange = () => { $("#qb_bagian_wrap").hidden = document.querySelector('input[name="qb_jenis"]:checked').value !== "sapi"; });
+  $("#qb_daftar").onsubmit = async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector("button[type=submit]"), err = $("#qb_err");
+    const jenis = document.querySelector('input[name="qb_jenis"]:checked').value;
+    const body = { jenis, bagian: jenis === "sapi" ? Number($("#qb_bagian").value) : 1, nama: $("#qb_nama").value.trim(), atas_nama: $("#qb_atas").value.trim(), wa: $("#qb_wa").value.trim(), kota: $("#qb_kota").value.trim(), pengingat_tgl: Number($("#qb_tgl").value) };
+    err.hidden = true; btn.disabled = true; btn.textContent = "Mendaftarkan…";
+    try {
+      const r = await api("public/qurban/daftar", { method: "POST", body });
+      QB.kode = r.kode; QB.wa = body.wa; QB.tab = "cek";
+      view(`<section class="hero" style="padding:18px"><small>Pendaftaran berhasil</small><h1 style="font-size:22px">Alhamdulillah, ${esc(body.nama)}</h1>
+        <p style="margin:0">Kode qurban Anda: <b style="font-size:20px">${esc(r.kode)}</b><br>Simpan kode ini bersama nomor WhatsApp Anda untuk mengecek tabungan.</p></section>
+        <button class="btn primary block" style="margin-top:12px" id="qb_lanjut">Mulai menabung</button>`);
+      $("#qb_lanjut").onclick = () => qbRender();
+    } catch (ex) { err.textContent = ex.message; err.hidden = false; btn.disabled = false; btn.textContent = "Daftar qurban"; }
+  };
+}
+function qbFormCek() {
+  $("#qb_body").innerHTML = `<form class="card" id="qb_cek" novalidate style="display:grid;gap:10px">
+    <label class="f" for="qb_kode">Kode qurban</label><div class="inp"><input id="qb_kode" value="${esc(QB.kode)}" placeholder="QB-0001" autocapitalize="characters"></div>
+    <label class="f" for="qb_wa2">Nomor WhatsApp terdaftar</label><div class="inp"><input id="qb_wa2" value="${esc(QB.wa)}" inputmode="tel"></div>
+    <div class="err" id="qb_err2" hidden></div>
+    <button class="btn primary block" type="submit">Lihat tabungan saya</button></form><div id="qb_dash" style="margin-top:12px"></div>`;
+  $("#qb_cek").onsubmit = async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector("button"), err = $("#qb_err2");
+    err.hidden = true; btn.disabled = true;
+    try { QB.kode = $("#qb_kode").value.trim().toUpperCase(); QB.wa = $("#qb_wa2").value.trim(); qbDashboard(await api("public/qurban/cek", { method: "POST", body: { kode: QB.kode, wa: QB.wa } })); }
+    catch (ex) { err.textContent = ex.message; err.hidden = false; }
+    finally { btn.disabled = false; }
+  };
+  if (QB.kode && QB.wa) $("#qb_cek").requestSubmit ? $("#qb_cek").requestSubmit() : null;
+}
+function qbDashboard(d) {
+  const st = QB_STATUS[d.status] || ["-", "warn"];
+  const bisaSetor = ["daftar", "cicil"].includes(d.status) && d.sisa > 0;
+  const hari = d.hari_ke_batas;
+  $("#qb_dash").innerHTML = `
+    <div class="card" style="display:grid;gap:10px">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><small>Kode ${esc(d.kode)}</small><h3 style="margin:2px 0">${esc(d.nama)}</h3><small>${d.jenis === "sapi" ? `Sapi · ${d.bagian}/7 bagian` : "Kambing · 1 ekor"}</small></div>
+        <span class="tag ${st[1]}">${st[0]}</span></div>
+      <div style="height:10px;border-radius:99px;background:#e6efeb;overflow:hidden"><i style="display:block;height:100%;width:${d.persen}%;background:#0a8a75"></i></div>
+      <div class="tiles"><div class="s"><small>Target</small><b>${rp(d.target)}</b></div><div class="s"><small>Terkumpul</small><b>${rp(d.terkumpul)}</b></div><div class="s"><small>Sisa</small><b>${rp(d.sisa)}</b></div></div>
+      <div class="hint">Batas pelunasan ${qbTgl(d.batas)}${hari > 0 ? ` · ${hari} hari lagi` : hari === 0 ? " · hari ini" : ""}</div>
+    </div>
+    ${bisaSetor ? `<div class="card" style="margin-top:12px;display:grid;gap:10px">
+      <h3 style="margin:0">Setor tabungan</h3>
+      <div class="hint">Saran setoran: <b>${rp(d.saran)}</b>. Anda bebas mengubah nominal, minimal ${rp(d.min_setoran)}.</div>
+      <label class="f" for="qb_nom">Nominal setoran</label><div class="inp"><span>Rp</span><input id="qb_nom" inputmode="numeric" value="${d.saran}"></div>
+      <label class="f" for="qb_met">Cara bayar</label><div class="inp"><select id="qb_met"><option value="transfer">Transfer bank</option><option value="qris">QRIS</option></select></div>
+      <div class="err" id="qb_err3" hidden></div>
+      <button class="btn primary block" id="qb_setor">Setor sekarang</button></div>` : ""}
+    <div class="card" style="margin-top:12px"><h3 style="margin:0 0 8px">Riwayat setoran</h3>
+      ${d.setoran.length ? d.setoran.map((s) => `<a href="#/${s.status === "paid" ? "kuitansi" : "bayar"}/${esc(s.id)}" style="display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line)">
+        <span>${tgl(s.created_at)}<small style="display:block">${s.metode === "qris" ? "QRIS" : "Transfer"} · ${s.status === "paid" ? "Lunas" : s.status === "cancelled" ? "Dibatalkan" : s.status === "expired" ? "Kedaluwarsa" : "Menunggu bukti"}</small></span><b>${rp(s.total)}</b></a>`).join("") : `<p class="hint" style="margin:0">Belum ada setoran.</p>`}
+    </div>
+    ${d.status !== "batal" ? `<div class="card" style="margin-top:12px;display:grid;gap:10px">
+      <h3 style="margin:0">Pengingat WhatsApp</h3>
+      <label class="f" for="qb_ptgl">Tanggal pengingat setiap bulan</label><div class="inp"><select id="qb_ptgl">${qbOpsiBulan(d.pengingat_tgl)}</select></div>
+      <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="qb_paktif" ${d.pengingat_aktif ? "checked" : ""}> Kirim pengingat bulanan</label>
+      <button class="btn ghost block" id="qb_simpan_p">Simpan pengaturan</button></div>` : ""}`;
+  if (bisaSetor) $("#qb_setor").onclick = async (e) => {
+    const btn = e.target, err = $("#qb_err3");
+    const nominal = Number(String($("#qb_nom").value).replace(/\D/g, "")) || 0;
+    err.hidden = true; btn.disabled = true; btn.textContent = "Menyiapkan pembayaran…";
+    try {
+      const r = await api("public/qurban/setor", { method: "POST", body: { kode: QB.kode, wa: QB.wa, nominal, metode: $("#qb_met").value } });
+      location.hash = "#/bayar/" + r.id;
+    } catch (ex) { err.textContent = ex.message; err.hidden = false; btn.disabled = false; btn.textContent = "Setor sekarang"; }
+  };
+  if (d.status !== "batal") $("#qb_simpan_p").onclick = async (e) => {
+    const btn = e.target; btn.disabled = true;
+    try { await api("public/qurban/pengaturan", { method: "POST", body: { kode: QB.kode, wa: QB.wa, pengingat_tgl: Number($("#qb_ptgl").value), pengingat_aktif: $("#qb_paktif").checked } }); toast("Pengaturan pengingat disimpan"); }
+    catch (ex) { toast(ex.message); } finally { btn.disabled = false; }
+  };
+}
+
 /* ---------- Status pembayaran & kuitansi ---------- */
 route(/^#\/(?:bayar|kuitansi)\/(\w+)$/, async (id) => {
   header("Status donasi", "#/riwayat"); nav("");

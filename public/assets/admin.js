@@ -99,7 +99,7 @@ async function busy(btn, fn) { const t = btn.innerHTML; btn.disabled = true; btn
 let ME = null, CAMPS = [], PUB = {}, FM = null, ROLES = {}, poll = null, lastSeq = 0;
 // [id, judul, ikon, hak akses]
 const ALL_PAGES = [["dashboard", "Ringkasan", "dash", "lihat"], ["tugas", "Tugas jemput", "route", "lapangan"], ["peta", "Peta sebaran", "map", "peta"], ["slip", "Slip & setoran", "receipt", "slip"],
-  ["amplop", "Amplop Ramadhan", "mail", "amplop"], ["donasi", "Donasi", "heart", "lihat"], ["program", "Program", "grid", "lihat"], ["berita", "Dokumentasi", "news", "dokumentasi"],
+  ["amplop", "Amplop Ramadhan", "mail", "amplop"], ["donasi", "Donasi", "heart", "lihat"], ["qurban", "Tabungan qurban", "heart", "lihat"], ["program", "Program", "grid", "lihat"], ["berita", "Dokumentasi", "news", "dokumentasi"],
   ["donatur", "Donatur", "users", "lihat"], ["fundraiser", "Relawan afiliator", "trophy", "lihat"], ["pesanwa", "Pesan WA", "wa", "crm"], ["upah", "Upah & penarikan", "cash", "keuangan"], ["penyimpanan", "Penyimpanan", "cloud", "penyimpanan"], ["pengaturan", "Pengaturan", "gear", "pengaturan"], ["akun", "Akun saya", "user", null]];
 let PAGES = [];
 const can = (p) => !!ME && (ME.role === "admin" || (ME.perms || []).includes(p));
@@ -499,6 +499,120 @@ async function donorDetail(id, after) {
 }
 
 /* ---------- Fundraiser ---------- */
+/* ---------- Tabungan qurban (admin) ---------- */
+const QB_TAG = { daftar: ["st-pending", "Belum menabung"], cicil: ["st-pending", "Sedang menabung"], lunas: ["st-paid", "Lunas"], disembelih: ["st-paid", "Disembelih"], dibagikan: ["st-paid", "Dibagikan"], batal: ["", "Dibatalkan"] };
+VIEWS.qurban = async () => {
+  const pilih = new URLSearchParams(location.hash.split("?")[1] || "").get("musim") || "";
+  const D = await api("admin/qurban" + (pilih ? "?musim=" + encodeURIComponent(pilih) : ""));
+  const m = D.musim;
+  if (!m) {
+    main(`<div class="ph"><h1>Tabungan qurban</h1><div class="acts"><button class="btn primary sm" id="qb_baru">${ic("plus")} Musim baru</button></div></div>
+      <div class="alert">${ic("alert")}<span>Belum ada musim qurban. Buat musim dulu, lalu bagikan tautan pendaftaran ke jamaah.</span></div>`);
+    $("#qb_baru").onclick = () => qbMusimForm(null);
+    return;
+  }
+  const hari = m.hari_ke_batas;
+  main(`<div class="ph"><h1>Tabungan qurban</h1><div class="acts">
+      <button class="btn ghost sm" onclick="copy('${location.origin}/#/qurban','Tautan pendaftaran qurban')">${ic("copy")} Salin tautan</button>
+      <button class="btn ghost sm" id="qb_ubah">${ic("gear")} Musim & harga</button>
+      <button class="btn primary sm" id="qb_baru">${ic("plus")} Musim baru</button></div></div>
+    <div class="fg" style="margin-bottom:12px"><div><label class="f" for="qb_pilih">Musim</label><div class="inp"><select id="qb_pilih">${D.musim_list.map((x) => `<option value="${x.id}" ${x.id === m.id ? "selected" : ""}>${esc(x.tahun_hijriah)} · pelunasan ${tglD(x.batas_pelunasan + " 00:00:00")} · ${x.status === "buka" ? "dibuka" : "ditutup"}</option>`).join("")}</select></div></div></div>
+    <div class="kpis">
+      <div class="kpi"><small>Peserta aktif</small><b>${D.ringkas.peserta}</b><span>${D.ringkas.lunas} lunas · ${D.ringkas.cicil} sedang menabung · ${D.ringkas.daftar} belum menabung</span></div>
+      <div class="kpi"><small>Terkumpul</small><b>${rpk(D.ringkas.terkumpul)}</b><span>dari target ${rpk(D.ringkas.target)}</span></div>
+      <div class="kpi ${hari >= 0 && hari <= 14 ? "warn" : ""}"><small>Batas pelunasan</small><b>${tglD(m.batas_pelunasan + " 00:00:00")}</b><span>${hari > 0 ? hari + " hari lagi" : hari === 0 ? "hari ini" : "sudah lewat"}</span></div>
+      <div class="kpi"><small>Komisi afiliator</small><b>${m.komisi_persen != null ? m.komisi_persen + "%" : "umum"}</b><span>untuk setoran lewat tautan relawan</span></div>
+    </div>
+    <div class="tw"><table class="t"><thead><tr><th>Kode</th><th>Peserta</th><th>Paket</th><th class="num">Target</th><th>Terkumpul</th><th>Status</th><th>Afiliator</th></tr></thead><tbody>
+    ${D.peserta.map((p) => `<tr class="click" data-id="${p.id}"><td class="mono">${esc(p.kode)}</td>
+      <td><b>${esc(p.nama)}</b>${p.atas_nama && p.atas_nama !== p.nama ? `<small>a.n. ${esc(p.atas_nama)}</small>` : ""}<small>${esc(p.kota || "-")} · +${esc(p.wa)}</small></td>
+      <td>${p.jenis === "sapi" ? `Sapi ${p.bagian}/7` : "Kambing"}</td><td class="num">${rp(p.target)}</td>
+      <td style="min-width:130px">${rp(p.terkumpul)}<div class="bar" style="margin:4px 0 0;height:5px"><i style="width:${p.persen}%"></i></div></td>
+      <td><span class="tag ${QB_TAG[p.status][0]}">${QB_TAG[p.status][1]}</span></td><td>${p.fr_nama ? esc(p.fr_nama) : "<small>-</small>"}</td></tr>`).join("")
+      || `<tr><td colspan="7" class="hint" style="text-align:center;padding:30px">Belum ada pendaftar. Bagikan tautan pendaftaran qurban ke jamaah.</td></tr>`}</tbody></table></div>`);
+  $("#qb_pilih").onchange = () => { location.hash = "#qurban?musim=" + $("#qb_pilih").value; };
+  $("#qb_ubah").onclick = () => qbMusimForm(m);
+  $("#qb_baru").onclick = () => qbMusimForm(null);
+  $$("tr[data-id]").forEach((tr) => tr.onclick = () => qbDetail(tr.dataset.id, D.musim_list));
+};
+function qbMusimForm(m) {
+  const v = m || { tahun_hijriah: "1448 H", harga_kambing: 2400000, harga_sapi_bagian: 2100000, min_setoran: 50000, kuota: 0, status: "buka", komisi_persen: null };
+  modal(m ? "Musim & harga qurban" : "Musim qurban baru", `<div class="fg">
+    ${field("qm_thn", "Tahun hijriah", v.tahun_hijriah || "", { ph: "mis. 1448 H" })}
+    ${field("qm_idul", "Tanggal Idul Adha", v.tanggal_idul_adha || "", { type: "date", hint: "Sesuai penetapan Kemenag." })}
+    ${field("qm_batas", "Batas pelunasan (opsional)", v.batas_pelunasan || "", { type: "date", hint: "Kosongkan untuk otomatis 20 hari sebelum Idul Adha." })}
+    ${field("qm_kambing", "Harga kambing (Rp)", String(v.harga_kambing || ""), { hint: "1 peserta = 1 ekor." })}
+    ${field("qm_sapi", "Harga sapi per bagian (Rp)", String(v.harga_sapi_bagian || ""), { hint: "1 sapi = 7 bagian." })}
+    ${field("qm_min", "Setoran minimal (Rp)", String(v.min_setoran || 50000))}
+    ${field("qm_kuota", "Kuota peserta", String(v.kuota || 0), { hint: "0 = tanpa batas." })}
+    ${field("qm_kom", "Komisi afiliator (%)", v.komisi_persen != null ? String(v.komisi_persen) : "", { hint: "Kosongkan untuk memakai persen umum dari Pengaturan." })}
+    ${field("qm_status", "Pendaftaran", v.status || "buka", { sel: [["buka", "Dibuka"], ["tutup", "Ditutup"]] })}
+    ${field("qm_cat", "Catatan", v.catatan || "", { full: true })}
+  </div><p class="hint" style="margin-top:8px">Harga yang sudah dikunci saat peserta mendaftar tidak berubah. Perubahan harga hanya berlaku untuk pendaftar berikutnya.</p>`,
+    `<button class="btn primary sm" id="qm_s">Simpan</button>`, true);
+  $("#qm_s").onclick = (e) => busy(e.target, async () => {
+    const komisi = val("qm_kom");
+    await api("admin/qurban/musim", { method: "POST", body: { id: m ? m.id : null, tahun_hijriah: val("qm_thn"), tanggal_idul_adha: val("qm_idul"), batas_pelunasan: val("qm_batas"),
+      harga_kambing: num(val("qm_kambing")), harga_sapi_bagian: num(val("qm_sapi")), min_setoran: num(val("qm_min")), kuota: num(val("qm_kuota")),
+      komisi_persen: komisi === "" ? null : komisi.replace(",", "."), status: val("qm_status"), catatan: val("qm_cat") } });
+    closeModal(); toast("Musim qurban disimpan"); VIEWS.qurban();
+  });
+}
+async function qbDetail(id, musimList) {
+  const p = await api("admin/qurban/peserta/" + id);
+  const bisaSetor = ["daftar", "cicil"].includes(p.status) && p.sisa > 0;
+  const bisaSembelih = p.status === "lunas", bisaBagi = p.status === "disembelih", bisaBatal = !["batal", "disembelih", "dibagikan"].includes(p.status);
+  const opsiMusim = musimList.filter((x) => x.id !== p.musim_id && x.status === "buka").map((x) => [String(x.id), `${x.tahun_hijriah} · pelunasan ${tglD(x.batas_pelunasan + " 00:00:00")}`]);
+  const reload = () => { closeModal(); VIEWS.qurban(); };
+  modal(`${esc(p.kode)} · ${esc(p.nama)}`, `
+    <p class="hint" style="margin:0">${p.jenis === "sapi" ? `Sapi ${p.bagian}/7 bagian` : "Kambing 1 ekor"}${p.atas_nama && p.atas_nama !== p.nama ? ` · a.n. ${esc(p.atas_nama)}` : ""} · +${esc(p.wa)}${p.fr_nama ? ` · afiliator ${esc(p.fr_nama)}` : ""}</p>
+    <div class="kpis" style="margin-top:10px"><div class="kpi"><small>Target</small><b>${rp(p.target)}</b></div><div class="kpi"><small>Terkumpul</small><b>${rp(p.terkumpul)}</b></div><div class="kpi"><small>Sisa</small><b>${rp(p.sisa)}</b></div></div>
+    ${p.dikembalikan ? `<p class="hint">Dikembalikan: ${rp(p.dikembalikan)}</p>` : ""}
+    ${p.catatan ? `<p class="hint">Catatan: ${esc(p.catatan)}</p>` : ""}
+    <div class="sect">Setoran</div>
+    ${p.setoran.length ? `<div class="tw"><table class="t"><tbody>${p.setoran.map((s) => `<tr><td>${tgl(s.created_at)}</td><td class="num">${rp(s.total)}</td><td>${s.metode === "tunai" ? "Tunai" : esc(s.metode)}</td>
+      <td><span class="tag ${s.status === "paid" ? "st-paid" : "st-pending"}">${esc(s.status)}</span></td><td><a href="#donasi?id=${encodeURIComponent(s.id)}" onclick="closeModal()">Buka</a></td></tr>`).join("")}</tbody></table></div>` : `<p class="hint">Belum ada setoran.</p>`}
+    ${bisaSetor ? `<div class="sect">Catat setoran tunai</div><div class="fg">${field("qb_nom", "Nominal", String(Math.min(p.sisa, p.saran)))}${field("qb_tgl", "Tanggal", "", { type: "date" })}</div>
+      <button class="btn primary sm" id="qb_setor_t" style="margin-top:8px">Catat setoran</button>` : ""}
+    ${bisaSembelih ? `<div class="sect">Penyembelihan</div><button class="btn green sm" id="qb_sembelih">Tandai disembelih</button>` : ""}
+    ${bisaBagi ? `<div class="sect">Penyaluran</div><button class="btn green sm" id="qb_bagi">Tandai dibagikan</button>` : ""}
+    ${bisaBatal ? `<div class="sect">Pembatalan</div><div class="fg">
+        ${field("qb_tindak", "Pilihan", "kembalikan", { sel: [["kembalikan", "Kembalikan dana ke peserta"], ["alihkan", "Alihkan ke musim lain"], ["infak", "Pindahkan setoran ke infak"]] })}
+        ${field("qb_alasan", "Alasan", "", { ph: "mis. batal atas permintaan" })}
+        <div id="qb_extra" class="full"></div></div>
+      <button class="btn danger sm" id="qb_batal" style="margin-top:8px">Proses pembatalan</button>` : ""}`, "", true);
+  $("#qb_setor_t")?.addEventListener("click", (e) => busy(e.target, async () => {
+    await api(`admin/qurban/peserta/${p.id}/setor`, { method: "POST", body: { nominal: num(val("qb_nom")), tanggal: val("qb_tgl") } });
+    toast("Setoran tunai dicatat"); reload();
+  }));
+  $("#qb_sembelih")?.addEventListener("click", (e) => busy(e.target, async () => {
+    await api(`admin/qurban/peserta/${p.id}/status`, { method: "POST", body: { status: "disembelih" } }); toast("Ditandai disembelih, peserta dikabari"); reload();
+  }));
+  $("#qb_bagi")?.addEventListener("click", (e) => busy(e.target, async () => {
+    await api(`admin/qurban/peserta/${p.id}/status`, { method: "POST", body: { status: "dibagikan" } }); toast("Ditandai dibagikan, peserta dikabari"); reload();
+  }));
+  if (bisaBatal) {
+    const tindak = () => {
+      const t = val("qb_tindak");
+      $("#qb_extra").innerHTML = t === "kembalikan" ? field("qb_kembali", "Nominal yang dikembalikan (Rp)", String(p.terkumpul), { hint: "Isi sesuai jumlah yang benar-benar Anda transfer kembali ke peserta." })
+        : t === "alihkan" ? (opsiMusim.length ? field("qb_musim_tuj", "Musim tujuan", opsiMusim[0][0], { sel: opsiMusim, hint: "Target peserta disesuaikan dengan harga musim tujuan. Setoran yang sudah masuk tetap tercatat." }) : `<div class="hint">Belum ada musim lain yang dibuka.</div>`)
+        : `<div class="hint">Setoran yang sudah masuk dipindah menjadi infak. Komisi afiliator mengikuti persen infak.</div>`;
+    };
+    $("#qb_tindak").onchange = tindak; tindak();
+    $("#qb_batal").onclick = (e) => {
+      const t = val("qb_tindak");
+      if (!window.confirm("Proses pembatalan qurban " + p.kode + "? Tindakan ini mengubah laporan dan komisi.")) return;
+      busy(e.target, async () => {
+        const body = { tindakan: t, alasan: val("qb_alasan") };
+        if (t === "kembalikan") body.nominal_kembali = num(val("qb_kembali"));
+        if (t === "alihkan") body.musim_tujuan_id = val("qb_musim_tuj");
+        const r = await api(`admin/qurban/peserta/${p.id}/batal`, { method: "POST", body });
+        toast(r.info || "Pembatalan diproses"); reload();
+      });
+    };
+  }
+}
+
 VIEWS.fundraiser = async () => {
   const rows = await api("admin/fundraisers");
   const link = location.origin + "/#/mitra";
