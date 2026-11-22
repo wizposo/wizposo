@@ -267,6 +267,7 @@ route(/^#\/?$/, async () => {
       <button onclick="openDonate('sedekah-jumat')"><span class="q">${ic("calendar", 26)}</span>Sedekah Jumat</button>
       <button onclick="location.hash='#/ambulans'"><span class="q r">${ic("ambulance", 26)}</span>Ambulans gratis</button>
     </div>
+    <a class="joinfr" href="#/qurban" style="margin-top:12px"><span class="ib o">${ic("heart", 22)}</span><span><h3>Tabungan Qurban</h3><p>Menabung sedikit demi sedikit sesuai kemampuan untuk qurban Idul Adha. Daftar, setor, dan pantau tabungan Anda.</p></span></a>
     <div class="sec"><h2>Program pilihan</h2><a href="#/program">Lihat semua</a></div>
     <div class="hscroll">${feat.map((c) => campCard(c)).join("")}</div>
     <div class="sec"><h2>Donasi terbaru</h2><span class="live">Langsung</span></div>
