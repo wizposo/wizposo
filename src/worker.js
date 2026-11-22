@@ -6,7 +6,7 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/")) return handle(request, env, ctx);
-    if (request.method === "GET" && (url.pathname === "/" || /^\/(c|program|berita)\/[\w-]+\/?$/.test(url.pathname))) return ogPage(request, env);
+    if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/qurban" || url.pathname === "/qurban/" || /^\/(c|program|berita)\/[\w-]+\/?$/.test(url.pathname))) return ogPage(request, env);
     return env.ASSETS.fetch(request);
   },
   async scheduled(event, env, ctx) {

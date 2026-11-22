@@ -514,6 +514,9 @@ route(/^#\/mitra$/, async () => {
     <div class="sec"><h2>Tautan ajakan Anda</h2></div>
     <div class="linkrow"><span class="ib">${ic("link")}</span><span class="tx"><b>Semua program</b><span>${origin}/?ref=${esc(me.me.kode)}</span></span>
       <button class="btn ghost" style="padding:8px 10px" onclick="copy('${origin}/?ref=${me.me.kode}','Tautan')">${ic("copy", 18)}</button></div>
+    <div class="linkrow"><span class="ib o">${ic("heart")}</span><span class="tx"><b>Tabungan Qurban</b><span>Peserta yang Anda ajak tercatat atas nama Anda</span></span>
+      <button class="btn ghost" style="padding:8px 10px" aria-label="Salin tautan qurban" onclick="copy('${origin}/qurban?ref=${me.me.kode}','Tautan qurban')">${ic("copy", 18)}</button>
+      <a class="btn green" style="padding:8px 10px" aria-label="Bagikan tautan qurban ke WhatsApp" target="_blank" rel="noopener" href="${waLink("", `Assalamu'alaikum, yuk ikut Tabungan Qurban WIZ Cabang ${CFG.cabang}. Menabung sedikit demi sedikit sesuai kemampuan, pelunasan sebelum Idul Adha:\n${origin}/qurban?ref=${me.me.kode}`)}">${ic("wa", 18)}</a></div>
     ${me.campaigns.map((c) => `<div class="linkrow"><span class="ib o">${ic(c.ikon)}</span><span class="tx"><b>${esc(c.judul)}</b><span>${rpk(c.terkumpul)} terkumpul</span></span>
       <button class="btn ghost" style="padding:8px 10px" aria-label="Salin tautan" onclick="copy('${link(c)}','Tautan')">${ic("copy", 18)}</button>
       <a class="btn green" style="padding:8px 10px" aria-label="Bagikan ke WhatsApp" target="_blank" rel="noopener" href="${waLink("", `${c.judul}\n${c.ringkas || ""}\n\nYuk ikut berbagi lewat WIZ Cabang ${CFG.cabang}:\n${link(c)}`)}">${ic("wa", 18)}</a></div>`).join("")}
@@ -670,7 +673,7 @@ route(/^#\/qurban$/, async () => {
 });
 function qbRender() {
   const m = QB.musim;
-  view(`<section class="hero" style="padding:18px">
+  view(`${QB.halaman.cover ? `<img src="${esc(QB.halaman.cover)}" alt="Tabungan qurban WIZ" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:16px;margin-bottom:12px">` : ""}<section class="hero" style="padding:18px">
       <small>Idul Adha ${esc(m.tahun_hijriah)} · perkiraan ${qbTgl(m.tanggal_idul_adha)}</small>
       <h1 style="font-size:22px">Tabungan Qurban WIZ</h1>
       <p style="margin:0">Menabung sedikit demi sedikit sesuai kemampuan Anda. <b>Pelunasan paling lambat ${qbTgl(m.batas_pelunasan)}</b>${m.hari_ke_batas > 0 ? ` (${m.hari_ke_batas} hari lagi)` : ""}.</p>
@@ -732,7 +735,7 @@ function qbFormDaftar() {
     e.preventDefault();
     const btn = e.target.querySelector("button[type=submit]"), err = $("#qb_err");
     const jenis = document.querySelector('input[name="qb_jenis"]:checked').value;
-    const body = { jenis, bagian: jenis === "sapi" ? Number($("#qb_bagian").value) : 1, nama: $("#qb_nama").value.trim(), atas_nama: $("#qb_atas").value.trim(), wa: $("#qb_wa").value.trim(), kota: $("#qb_kota").value.trim(), pengingat_tgl: Number($("#qb_tgl").value) };
+    const body = { jenis, bagian: jenis === "sapi" ? Number($("#qb_bagian").value) : 1, nama: $("#qb_nama").value.trim(), atas_nama: $("#qb_atas").value.trim(), wa: $("#qb_wa").value.trim(), kota: $("#qb_kota").value.trim(), pengingat_tgl: Number($("#qb_tgl").value), ref: refNow() };
     err.hidden = true; btn.disabled = true; btn.textContent = "Mendaftarkan…";
     try {
       const r = await api("public/qurban/daftar", { method: "POST", body });

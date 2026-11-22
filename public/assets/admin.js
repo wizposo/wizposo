@@ -551,17 +551,34 @@ async function qbHalamanForm() {
     D.forEach((d) => galeriEditor("#qbg-" + d.k, d.gal));
     $$("[data-hapus]").forEach((b) => b.onclick = () => { sync(); const i = D.findIndex((d) => String(d.k) === b.dataset.hapus); if (i >= 0) D.splice(i, 1); draw(); });
   };
-  modal("Halaman publik qurban", `${field("qh_narasi", "Narasi program", h.narasi, { area: true, rows: 7, full: true, ph: "Tulis latar belakang, tujuan, dan kepercayaan program. Pisahkan paragraf dengan baris kosong.", hint: "Tampil di bagian atas halaman #/qurban untuk jamaah." })}
+  modal("Halaman publik qurban", `<div class="sect" style="margin-top:0">Gambar sampul</div>
+    <p class="hint" style="margin:0 0 8px">Tampil di halaman qurban dan saat tautan dibagikan ke WhatsApp. Gunakan foto qurban yang mendatar.</p>
+    <div id="qh_cover"></div>
+    ${field("qh_narasi", "Narasi program", h.narasi, { area: true, rows: 7, full: true, ph: "Tulis latar belakang, tujuan, dan kepercayaan program. Pisahkan paragraf dengan baris kosong.", hint: "Tampil di bagian atas halaman #/qurban untuk jamaah." })}
     <div class="sect" style="margin-top:14px">Dokumentasi tahun sebelumnya</div>
     <div id="qh_blok"></div>
     <button class="btn ghost sm" id="qh_tambah">${ic("plus")} Tambah dokumentasi</button>
     <p class="hint" style="margin-top:10px">Nama peserta yang sudah menyetor tampil otomatis, hanya nama dan paket, tanpa nominal.</p>`,
     `<button class="btn primary sm" id="qh_s">Simpan</button>`, true);
   draw();
+  let cover = h.cover_id || null;
+  const drawCover = () => {
+    $("#qh_cover").innerHTML = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      ${cover ? `<img src="/api/media/${cover}" alt="Sampul" style="width:200px;aspect-ratio:16/9;object-fit:cover;border-radius:12px;border:1px solid var(--line)">` : `<span class="hint">Belum ada gambar sampul.</span>`}
+      <label class="btn ghost sm" style="cursor:pointer">${ic("plus")} ${cover ? "Ganti gambar" : "Unggah gambar"}<input type="file" accept="image/*" id="qh_cover_f" hidden></label>
+      ${cover ? `<button type="button" class="btn ghost sm" id="qh_cover_hapus">Hapus</button>` : ""}</div>`;
+    $("#qh_cover_f").onchange = async (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      try { const data = await resizeImage(f, 1200); cover = (await api("admin/media", { method: "POST", body: { gambar: data } })).id; drawCover(); toast("Gambar sampul diunggah. Klik Simpan."); }
+      catch (ex) { toast(ex.message); }
+    };
+    $("#qh_cover_hapus")?.addEventListener("click", () => { cover = null; drawCover(); });
+  };
+  drawCover();
   $("#qh_tambah").onclick = () => { sync(); D.push({ k: ++seq, judul: "", tahun: "", video: "", gal: { ids: [], cover: null } }); draw(); };
   $("#qh_s").onclick = (e) => busy(e.target, async () => {
     sync();
-    const body = { narasi: $("#qh_narasi").value, dokumentasi: D.map((d) => ({ judul: d.judul, tahun: d.tahun,
+    const body = { narasi: $("#qh_narasi").value, cover_id: cover, dokumentasi: D.map((d) => ({ judul: d.judul, tahun: d.tahun,
       video: d.video.split("\n").map((x) => x.trim()).filter(Boolean),
       galeri: d.gal.cover ? [d.gal.cover, ...d.gal.ids.filter((i) => i !== d.gal.cover)] : d.gal.ids })) };
     await api("admin/qurban/halaman", { method: "POST", body });
