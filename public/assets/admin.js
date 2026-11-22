@@ -605,7 +605,11 @@ async function qbDetail(id, musimList) {
     <div class="sect">Setoran</div>
     ${p.setoran.length ? `<div class="tw"><table class="t"><tbody>${p.setoran.map((s) => `<tr><td>${tgl(s.created_at)}</td><td class="num">${rp(s.total)}</td><td>${s.metode === "tunai" ? "Tunai" : esc(s.metode)}</td>
       <td><span class="tag ${s.status === "paid" ? "st-paid" : "st-pending"}">${esc(s.status)}</span></td><td><a href="#donasi?id=${encodeURIComponent(s.id)}" onclick="closeModal()">Buka</a></td></tr>`).join("")}</tbody></table></div>` : `<p class="hint">Belum ada setoran.</p>`}
-    ${bisaSetor ? `<div class="sect">Catat setoran tunai</div><div class="fg">${field("qb_nom", "Nominal", String(Math.min(p.sisa, p.saran)))}${field("qb_tgl", "Tanggal", "", { type: "date" })}</div>
+    ${bisaSetor ? `<div class="sect">Catat setoran manual</div><p class="hint" style="margin:0 0 8px">Untuk setoran yang dibayar sebelum sistem aktif, atau yang diterima langsung oleh admin. Peserta otomatis menerima kuitansi WhatsApp.</p>
+      <div class="fg">${field("qb_nom", "Nominal", String(Math.min(p.sisa, p.saran)))}${field("qb_tgl", "Tanggal setoran", "", { type: "date" })}
+        ${field("qb_met", "Cara bayar", "tunai", { sel: [["tunai", "Tunai"], ["transfer", "Transfer bank (wajib bukti)"]] })}
+        ${field("qb_cat", "Catatan (opsional)", "", { full: true, ph: "mis. setoran sebelum sistem tabungan qurban aktif" })}
+        <div class="full" id="qb_bukti_wrap" hidden><label class="f" for="qb_bukti">Bukti transfer</label><div class="inp"><input type="file" id="qb_bukti" accept="image/*"></div><div class="hint" id="qb_bukti_info">Belum ada bukti diunggah.</div></div></div>
       <button class="btn primary sm" id="qb_setor_t" style="margin-top:8px">Catat setoran</button>` : ""}
     ${bisaSembelih ? `<div class="sect">Penyembelihan</div><button class="btn green sm" id="qb_sembelih">Tandai disembelih</button>` : ""}
     ${bisaBagi ? `<div class="sect">Penyaluran</div><button class="btn green sm" id="qb_bagi">Tandai dibagikan</button>` : ""}
@@ -614,9 +618,19 @@ async function qbDetail(id, musimList) {
         ${field("qb_alasan", "Alasan", "", { ph: "mis. batal atas permintaan" })}
         <div id="qb_extra" class="full"></div></div>
       <button class="btn danger sm" id="qb_batal" style="margin-top:8px">Proses pembatalan</button>` : ""}`, "", true);
+  let buktiId = null;
+  const syncMet = () => { const t = val("qb_met") === "transfer"; const w = $("#qb_bukti_wrap"); if (w) w.hidden = !t; };
+  $("#qb_met")?.addEventListener("change", syncMet); syncMet();
+  $("#qb_bukti")?.addEventListener("change", async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    try { const data = await resizeImage(f); buktiId = (await api("admin/media", { method: "POST", body: { gambar: data } })).id; $("#qb_bukti_info").textContent = "Bukti transfer tersimpan."; }
+    catch (ex) { buktiId = null; toast(ex.message); }
+  });
   $("#qb_setor_t")?.addEventListener("click", (e) => busy(e.target, async () => {
-    await api(`admin/qurban/peserta/${p.id}/setor`, { method: "POST", body: { nominal: num(val("qb_nom")), tanggal: val("qb_tgl") } });
-    toast("Setoran tunai dicatat"); reload();
+    const met = val("qb_met");
+    if (met === "transfer" && !buktiId) throw new Error("Unggah bukti transfer dulu.");
+    await api(`admin/qurban/peserta/${p.id}/setor`, { method: "POST", body: { nominal: num(val("qb_nom")), tanggal: val("qb_tgl"), metode: met, bukti_id: buktiId, catatan: val("qb_cat") } });
+    toast("Setoran dicatat, kuitansi dikirim ke peserta"); reload();
   }));
   $("#qb_sembelih")?.addEventListener("click", (e) => busy(e.target, async () => {
     await api(`admin/qurban/peserta/${p.id}/status`, { method: "POST", body: { status: "disembelih" } }); toast("Ditandai disembelih, peserta dikabari"); reload();
