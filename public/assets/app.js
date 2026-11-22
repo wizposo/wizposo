@@ -504,6 +504,7 @@ route(/^#\/mitra$/, async () => {
   header("Portal fundraiser"); nav("#/akun");
   let me = null; try { me = await api("fr/me"); } catch {}
   if (!me) return mitraAuth("daftar");
+  let qbFr = null; try { qbFr = await api("fr/qurban"); } catch {}
   const link = (c) => `${origin}/c/${c.slug}?ref=${me.me.kode}`;
   view(`<section class="hero" style="padding:18px"><small>Fundraiser · kode ${esc(me.me.kode)}</small><h1 style="font-size:20px">Assalamu'alaikum, ${esc(me.me.nama.split(" ")[0])}</h1>
       <p style="margin:0">${me.me.status === "aktif" ? "Setiap donasi lewat tautan Anda tercatat otomatis dan Anda mendapat notifikasi WhatsApp." : "Akun Anda menunggu persetujuan admin."}</p></section>
@@ -520,6 +521,13 @@ route(/^#\/mitra$/, async () => {
     ${me.campaigns.map((c) => `<div class="linkrow"><span class="ib o">${ic(c.ikon)}</span><span class="tx"><b>${esc(c.judul)}</b><span>${rpk(c.terkumpul)} terkumpul</span></span>
       <button class="btn ghost" style="padding:8px 10px" aria-label="Salin tautan" onclick="copy('${link(c)}','Tautan')">${ic("copy", 18)}</button>
       <a class="btn green" style="padding:8px 10px" aria-label="Bagikan ke WhatsApp" target="_blank" rel="noopener" href="${waLink("", `${c.judul}\n${c.ringkas || ""}\n\nYuk ikut berbagi lewat WIZ Cabang ${CFG.cabang}:\n${link(c)}`)}">${ic("wa", 18)}</a></div>`).join("")}
+    ${qbFr && qbFr.peserta.length ? `<div class="sec"><h2>Peserta qurban yang Anda ajak</h2></div>
+    <div class="tiles"><div class="s"><small>Peserta</small><b>${qbFr.ringkas.total}</b></div><div class="s"><small>Sudah lunas</small><b>${qbFr.ringkas.lunas}</b></div><div class="s"><small>Terkumpul</small><b>${rpk(qbFr.ringkas.terkumpul)}</b></div></div>
+    <div class="card" style="display:grid;gap:10px">${qbFr.peserta.map((p) => { const st = QB_STATUS[p.status] || ["-", "warn"]; return `<div style="display:grid;gap:6px;padding-bottom:10px;border-bottom:1px solid var(--line)">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div><b>${esc(p.nama)}</b><small style="display:block;color:var(--muted)">${esc(p.kode)} · ${p.jenis === "sapi" ? `Sapi ${p.bagian}/7` : "Kambing 1 ekor"}${p.kota ? " · " + esc(p.kota) : ""} · ${esc(p.tahun_hijriah)}</small></div><span class="tag ${st[1]}">${st[0]}</span></div>
+      <div style="height:6px;border-radius:99px;background:#e6efeb;overflow:hidden"><i style="display:block;height:100%;width:${p.persen}%;background:#0a8a75"></i></div>
+      <small style="color:var(--muted)">${rp(p.terkumpul)} dari ${rp(p.target)} · didaftarkan ${tgl(p.daftar)}</small></div>`; }).join("")}</div>
+    <p class="hint" style="margin:8px 0 0">Nomor WhatsApp peserta tidak ditampilkan demi privasi. Untuk data lengkap, hubungi admin WIZ.</p>` : ""}
     <div class="sec"><h2>Papan kebaikan</h2></div>
     <div class="card board">${me.leaderboard.map((x) => `<div class="r ${x.saya ? "me" : ""}"><span class="n">${x.rank}</span><span>${esc(x.nama)}${x.saya ? " (Anda)" : ""}</span><span class="am">${rpk(x.total)}</span></div>`).join("") || "<p>Belum ada data.</p>"}</div>
     <div class="sec"><h2>Donasi lewat tautan Anda</h2></div>
