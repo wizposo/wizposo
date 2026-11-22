@@ -282,12 +282,18 @@ route(/^#\/?$/, async () => {
     <a class="joinfr" href="#/mitra"><span class="ib">${ic("trophy", 22)}</span><span><h3>Jadi fundraiser WIZ ${esc(CFG.cabang)}</h3><p>Dapatkan tautan ajakan pribadi, pantau hasilnya, dan raih pahala dari setiap kebaikan yang Anda ajak.</p></span></a>
     <div class="sec"><h2>Mengapa titip di WIZ?</h2></div>
     <div class="trust">
-      <div class="t">${ic("heart")}<b>Untuk ${esc(CFG.cabang)}</b>Seluruh donasi di aplikasi ini disalurkan di wilayah ${esc(CFG.cabang)}</div>
-      <div class="t">${ic("shield")}<b>LAZNAS resmi</b>SK Kemenag RI No. 1209/2024</div>
+      <div class="t" data-trust="poso" style="cursor:pointer">${ic("heart")}<b>Untuk ${esc(CFG.cabang)}</b>Seluruh donasi di aplikasi ini disalurkan di wilayah ${esc(CFG.cabang)}</div>
+      <div class="t" data-trust="laznas" style="cursor:pointer">${ic("shield")}<b>LAZNAS resmi</b>SK Kemenag RI No. 1209/2024</div>
       <div class="t">${ic("scale")}<b>Dana terpisah</b>Zakat, infak, dan fidyah dicatat terpisah</div>
       <div class="t">${ic("bolt")}<b>Kuitansi otomatis</b>Bukti dan kabar penyaluran dikirim ke WhatsApp</div>
     </div>
+    <div id="trustDetail" class="card" hidden style="margin-top:10px"></div>
     <footer class="foot">Wahdah Inspirasi Zakat (WIZ) Cabang ${esc(CFG.cabang)}<br>Dana yang didonasikan bukan bersumber dan bukan untuk tujuan pencucian uang, terorisme, maupun tindak kejahatan lainnya.</footer>`);
+  const TRUST = {
+    poso: `<img src="/assets/poso.jpg" alt="Penyaluran WIZ ${esc(CFG.cabang)}" style="width:100%;border-radius:10px" onerror="this.outerHTML='<p>Foto penyaluran belum tersedia.</p>'"><p class="hint" style="margin:8px 0 0">Donasi Anda disalurkan langsung di wilayah ${esc(CFG.cabang)}.</p>`,
+    laznas: `<b>Dana terpisah</b><p style="margin:4px 0 10px">Zakat, infak, sedekah, dan fidyah dicatat di pos masing-masing dan tidak bercampur.</p><b>Kuitansi otomatis</b><p style="margin:4px 0 0">Setiap donasi lunas otomatis diterbitkan kuitansinya dan dikirim ke WhatsApp Anda.</p>`,
+  };
+  document.querySelectorAll(".trust [data-trust]").forEach((el) => el.onclick = () => { const d = $("#trustDetail"); d.innerHTML = TRUST[el.dataset.trust]; d.hidden = false; });
   drawJar($("#jarHome"), 0.62);
   const tick = async () => { try { const l = await api("public/live"); const t = $("#ticker"); if (t) t.innerHTML = tickerRows(l.recent.slice(0, 5)); } catch {} };
   tick(); liveTimer = setInterval(tick, 20000);
@@ -527,7 +533,8 @@ route(/^#\/mitra$/, async () => {
     <div class="card" style="display:grid;gap:10px">${qbFr.peserta.map((p) => { const st = QB_STATUS[p.status] || ["-", "warn"]; return `<div style="display:grid;gap:6px;padding-bottom:10px;border-bottom:1px solid var(--line)">
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div><b>${esc(p.nama)}</b><small style="display:block;color:var(--muted)">${esc(p.kode)} · ${p.jenis === "sapi" ? `Sapi ${p.bagian}/7` : "Kambing 1 ekor"}${p.kota ? " · " + esc(p.kota) : ""} · ${esc(p.tahun_hijriah)}</small></div><span class="tag ${st[1]}">${st[0]}</span></div>
       <div style="height:6px;border-radius:99px;background:#e6efeb;overflow:hidden"><i style="display:block;height:100%;width:${p.persen}%;background:#0a8a75"></i></div>
-      <small style="color:var(--muted)">${rp(p.terkumpul)} dari ${rp(p.target)} · didaftarkan ${tgl(p.daftar)}</small></div>`; }).join("")}</div>
+      <small style="color:var(--muted)">${rp(p.terkumpul)} dari ${rp(p.target)} · didaftarkan ${tgl(p.daftar)}</small>
+      <small style="color:${p.komisi_siap ? "#0a8a75" : "var(--muted)"}">Komisi ${rp(p.komisi)} · ${p.komisi_siap ? "siap dicairkan" : "cair setelah lunas"}</small></div>`; }).join("")}</div>
     <p class="hint" style="margin:8px 0 0">Nomor WhatsApp peserta tidak ditampilkan demi privasi. Untuk data lengkap, hubungi admin WIZ.</p>` : ""}
     <div class="sec"><h2>Papan kebaikan</h2></div>
     <div class="card board">${me.leaderboard.map((x) => `<div class="r ${x.saya ? "me" : ""}"><span class="n">${x.rank}</span><span>${esc(x.nama)}${x.saya ? " (Anda)" : ""}</span><span class="am">${rpk(x.total)}</span></div>`).join("") || "<p>Belum ada data.</p>"}</div>

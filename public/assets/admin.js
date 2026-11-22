@@ -427,7 +427,7 @@ async function campForm(c = {}) {
     <label class="f">Gambar program <small>(rasio 16:9 paling pas)</small></label><div id="c_gal"></div>
     <div class="fg">${field("c_judul", "Judul", c.judul || "", { full: true })}${field("c_ringkas", "Ringkasan singkat", c.ringkas || "", { full: true, hint: "Tampil di kartu program, maksimal 160 karakter." })}
     ${field("c_jenis", "Jenis dana", c.jenis_dana || "infak", { sel: [["infak", "Infak / sedekah"], ["zakat", "Zakat"], ["wakaf", "Wakaf"], ["fidyah", "Fidyah"]] })}${field("c_kat", "Kategori", c.kategori || "", { list: "kats" })}
-    ${field("c_target", "Target (kosongkan bila tanpa target)", c.target || "", { pre: "Rp", num: true })}${field("c_batas", "Batas waktu (opsional)", c.batas || "", { type: "date" })}
+    ${field("c_target", "Target (kosongkan bila tanpa target)", c.target || "", { pre: "Rp", num: true })}${field("c_batas", "Batas waktu (opsional)", c.batas || "", { type: "date" })}${field("c_komisi", "Komisi afiliator (%) – kosongkan untuk persen umum", c.komisi_persen != null ? String(c.komisi_persen) : "", { hint: "Hanya untuk donasi lewat afiliator pada program ini." })}
     ${field("c_ikon", "Ikon cadangan", c.ikon || "heart", { sel: IKON.map((i) => [i, i]) })}${field("c_status", "Status", c.status || "aktif", { sel: [["aktif", "Aktif (tampil)"], ["draft", "Draf (tersembunyi)"], ["selesai", "Selesai (arsip)"]] })}
     ${field("c_urut", "Urutan tampil", c.urutan || 100, { num: true })}<div><label class="chk"><input type="checkbox" id="c_ung" ${c.unggulan ? "checked" : ""}> Tampilkan di "Program pilihan"</label></div>
     ${field("c_cerita", "Cerita program", c.cerita || "", { area: true, rows: 8, full: true, hint: "Pisahkan paragraf dengan baris kosong. Tulis **teks** untuk huruf tebal." })}</div>
@@ -438,7 +438,7 @@ async function campForm(c = {}) {
   galeriEditor("#c_gal", gal);
   $("#c_save").onclick = (e) => busy(e.target, async () => {
     const body = { judul: val("c_judul"), ringkas: val("c_ringkas"), jenis_dana: val("c_jenis"), kategori: val("c_kat"), target: num(val("c_target")), batas: val("c_batas"),
-      ikon: val("c_ikon"), status: val("c_status"), urutan: num(val("c_urut")), unggulan: $("#c_ung").checked, cerita: $("#c_cerita").value, cover_id: gal.cover, galeri: gal.ids, slug: c.slug };
+      ikon: val("c_ikon"), status: val("c_status"), urutan: num(val("c_urut")), komisi_persen: val("c_komisi") === "" ? null : val("c_komisi").replace(",", "."), unggulan: $("#c_ung").checked, cerita: $("#c_cerita").value, cover_id: gal.cover, galeri: gal.ids, slug: c.slug };
     await api(c.id ? "admin/campaigns/" + c.id : "admin/campaigns", { method: c.id ? "PUT" : "POST", body }); closeModal(); toast("Program disimpan"); VIEWS.program();
   });
   if (!c.id) return;
@@ -598,7 +598,7 @@ function qbMusimForm(m) {
     ${field("qm_k_c", "Sapi kelas C – harga per bagian (Rp)", String(((v.kelas_sapi || []).find((x) => x.kode === "c") || {}).harga || ""))}
     ${field("qm_min", "Setoran minimal (Rp)", String(v.min_setoran || 50000))}
     ${field("qm_kuota", "Kuota peserta", String(v.kuota || 0), { hint: "0 = tanpa batas." })}
-    ${field("qm_kom", "Komisi afiliator (%)", v.komisi_persen != null ? String(v.komisi_persen) : "", { hint: "Kosongkan untuk memakai persen umum dari Pengaturan." })}
+    ${field("qm_kom", "Keuntungan afiliator per peserta lunas (Rp)", String(v.komisi_rp ?? 50000), { hint: "Nominal tetap per peserta, dicairkan setelah peserta lunas." })}
     ${field("qm_status", "Pendaftaran", v.status || "buka", { sel: [["buka", "Dibuka"], ["tutup", "Ditutup"]] })}
     ${field("qm_cat", "Catatan", v.catatan || "", { full: true })}
   </div><p class="hint" style="margin-top:8px">Harga yang sudah dikunci saat peserta mendaftar tidak berubah. Perubahan harga hanya berlaku untuk pendaftar berikutnya.</p>`,
@@ -608,7 +608,7 @@ function qbMusimForm(m) {
     await api("admin/qurban/musim", { method: "POST", body: { id: m ? m.id : null, tahun_hijriah: val("qm_thn"), tanggal_idul_adha: val("qm_idul"), batas_pelunasan: val("qm_batas"),
       harga_kambing: num(val("qm_kambing")), harga_sapi_bagian: num(val("qm_sapi")), min_setoran: num(val("qm_min")), kuota: num(val("qm_kuota")),
       kelas_sapi: ["a", "b", "c"].map((kd) => ({ kode: kd, harga: num(val("qm_k_" + kd)) })).filter((k) => k.harga > 0),
-      komisi_persen: komisi === "" ? null : komisi.replace(",", "."), status: val("qm_status"), catatan: val("qm_cat") } });
+      komisi_persen: null, komisi_rp: num(komisi), status: val("qm_status"), catatan: val("qm_cat") } });
     closeModal(); toast("Musim qurban disimpan"); VIEWS.qurban();
   });
 }
