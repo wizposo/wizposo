@@ -663,9 +663,9 @@ route(/^#\/qurban$/, async () => {
   header("Tabungan Qurban", "#/"); nav("");
   let d = { musim: null };
   try { d = await api("public/qurban"); } catch {}
-  QB.musim = d.musim;
+  QB.musim = d.musim; QB.halaman = d.halaman || { narasi: "", dokumentasi: [] }; QB.penyetor = d.penyetor || [];
   if (!d.musim) return view(`<section class="hero" style="padding:18px"><small>Tabungan qurban</small><h1 style="font-size:20px">Pendaftaran belum dibuka</h1>
-    <p style="margin:0">Pantau informasi terbaru dari WIZ Cabang ${esc(d.cabang || "")}.</p></section>`);
+    <p style="margin:0">Pantau informasi terbaru dari WIZ Cabang ${esc(d.cabang || "")}.</p></section>${qbNarasi(QB.halaman.narasi)}${qbBawah(QB.halaman, [])}`);
   qbRender();
 });
 function qbRender() {
@@ -674,7 +674,7 @@ function qbRender() {
       <small>Idul Adha ${esc(m.tahun_hijriah)} · perkiraan ${qbTgl(m.tanggal_idul_adha)}</small>
       <h1 style="font-size:22px">Tabungan Qurban WIZ</h1>
       <p style="margin:0">Menabung sedikit demi sedikit sesuai kemampuan Anda. <b>Pelunasan paling lambat ${qbTgl(m.batas_pelunasan)}</b>${m.hari_ke_batas > 0 ? ` (${m.hari_ke_batas} hari lagi)` : ""}.</p>
-    </section>
+    </section>${qbNarasi(QB.halaman.narasi)}
     <div class="tiles" style="margin-top:12px">
       <div class="s"><small>Kambing</small><b>${rp(m.harga_kambing)}</b><small>1 ekor</small></div>
       <div class="s"><small>Sapi</small><b>${rp(m.harga_sapi_bagian)}</b><small>per bagian · 7 bagian = 1 sapi</small></div>
@@ -683,9 +683,30 @@ function qbRender() {
       <button class="${QB.tab === "daftar" ? "on" : ""}" data-qb="daftar">Daftar qurban</button>
       <button class="${QB.tab === "cek" ? "on" : ""}" data-qb="cek">Cek tabungan saya</button>
     </div>
-    <div id="qb_body" style="margin-top:12px"></div>`);
+    <div id="qb_body" style="margin-top:12px"></div>${qbBawah(QB.halaman, QB.penyetor)}`);
   document.querySelectorAll("[data-qb]").forEach((b) => b.onclick = () => { QB.tab = b.dataset.qb; qbRender(); });
   QB.tab === "daftar" ? qbFormDaftar() : qbFormCek();
+}
+function qbNarasi(t) {
+  t = String(t || "").trim();
+  if (!t) return "";
+  return `<section class="card" style="margin-top:12px"><h3 style="margin:0 0 8px">Tentang program ini</h3>${t.split(/\n\s*\n/).map((p) => `<p style="margin:0 0 10px;line-height:1.6">${esc(p).replace(/\n/g, "<br>")}</p>`).join("")}</section>`;
+}
+function qbVideo(v) {
+  if (v.kind === "youtube") return `<div class="qb-vid"><iframe src="https://www.youtube-nocookie.com/embed/${esc(v.id)}" title="Video dokumentasi qurban" loading="lazy" allowfullscreen></iframe></div>`;
+  if (v.kind === "embed") return `<div class="qb-vid ${v.rasio === "9/16" ? "tegak" : ""}"><iframe src="${esc(v.src)}" title="Video dokumentasi qurban" loading="lazy" allowfullscreen></iframe></div>`;
+  return `<a class="btn ghost block" href="${esc(v.url)}" target="_blank" rel="noopener">Tonton video dokumentasi${v.host ? " di " + esc(v.host) : ""}</a>`;
+}
+function qbBawah(h, penyetor) {
+  const dok = (h.dokumentasi || []).map((d) => `<section class="card" style="margin-top:12px;display:grid;gap:10px">
+      <h3 style="margin:0">${esc(d.judul || "Dokumentasi qurban")}${d.tahun ? ` <small>· ${esc(d.tahun)}</small>` : ""}</h3>
+      ${(d.video || []).map(qbVideo).join("")}
+      ${(d.galeri || []).length ? `<div class="qb-gal">${d.galeri.map((s) => `<a href="${esc(s)}" target="_blank" rel="noopener"><img src="${esc(s)}" alt="Foto penyaluran qurban" loading="lazy"></a>`).join("")}</div>` : ""}
+    </section>`).join("");
+  const pen = penyetor.length ? `<section class="card" style="margin-top:12px"><h3 style="margin:0 0 4px">Sudah menabung</h3>
+      <p class="hint" style="margin:0 0 10px">${penyetor.length} peserta sudah menyetorkan tabungannya. Barakallahu fiikum.</p>
+      <div class="qb-names">${penyetor.map((p) => `<div><b>${esc(p.nama)}</b><small>${esc(p.paket)}</small></div>`).join("")}</div></section>` : "";
+  return dok + pen;
 }
 function qbFormDaftar() {
   const m = QB.musim;

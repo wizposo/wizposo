@@ -514,6 +514,7 @@ VIEWS.qurban = async () => {
   const hari = m.hari_ke_batas;
   main(`<div class="ph"><h1>Tabungan qurban</h1><div class="acts">
       <button class="btn ghost sm" onclick="copy('${location.origin}/#/qurban','Tautan pendaftaran qurban')">${ic("copy")} Salin tautan</button>
+      <button class="btn ghost sm" id="qb_halaman">${ic("grid")} Halaman publik</button>
       <button class="btn ghost sm" id="qb_ubah">${ic("gear")} Musim & harga</button>
       <button class="btn primary sm" id="qb_baru">${ic("plus")} Musim baru</button></div></div>
     <div class="fg" style="margin-bottom:12px"><div><label class="f" for="qb_pilih">Musim</label><div class="inp"><select id="qb_pilih">${D.musim_list.map((x) => `<option value="${x.id}" ${x.id === m.id ? "selected" : ""}>${esc(x.tahun_hijriah)} · pelunasan ${tglD(x.batas_pelunasan + " 00:00:00")} · ${x.status === "buka" ? "dibuka" : "ditutup"}</option>`).join("")}</select></div></div></div>
@@ -532,9 +533,41 @@ VIEWS.qurban = async () => {
       || `<tr><td colspan="7" class="hint" style="text-align:center;padding:30px">Belum ada pendaftar. Bagikan tautan pendaftaran qurban ke jamaah.</td></tr>`}</tbody></table></div>`);
   $("#qb_pilih").onchange = () => { location.hash = "#qurban?musim=" + $("#qb_pilih").value; };
   $("#qb_ubah").onclick = () => qbMusimForm(m);
+  $("#qb_halaman").onclick = () => qbHalamanForm();
   $("#qb_baru").onclick = () => qbMusimForm(null);
   $$("tr[data-id]").forEach((tr) => tr.onclick = () => qbDetail(tr.dataset.id, D.musim_list));
 };
+async function qbHalamanForm() {
+  const h = await api("admin/qurban/halaman");
+  let seq = 0;
+  const D = h.dokumentasi.map((d) => ({ k: ++seq, judul: d.judul, tahun: d.tahun, video: (d.video || []).join("\n"), gal: { ids: [...(d.galeri || [])], cover: (d.galeri || [])[0] || null } }));
+  const sync = () => D.forEach((d) => { d.judul = val("qh_j" + d.k); d.tahun = val("qh_t" + d.k); d.video = $("#qh_v" + d.k)?.value || ""; });
+  const draw = () => {
+    $("#qh_blok").innerHTML = D.map((d, i) => `<div class="card" style="margin-bottom:10px;padding:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center"><b>Dokumentasi ${i + 1}</b><button type="button" class="btn ghost sm" data-hapus="${d.k}">Hapus</button></div>
+        <div class="fg" style="margin-top:8px">${field("qh_j" + d.k, "Judul", d.judul, { ph: "mis. Penyaluran qurban 1447 H, Poso" })}${field("qh_t" + d.k, "Tahun", d.tahun, { ph: "mis. 1447 H" })}
+        ${field("qh_v" + d.k, "Tautan video (satu per baris)", d.video, { area: true, rows: 3, full: true, ph: "https://youtu.be/...", hint: "YouTube, Facebook, TikTok, Instagram, atau Vimeo. Tampil langsung di halaman." })}</div>
+        <div class="sect">Galeri foto penyaluran</div><div id="qbg-${d.k}"></div></div>`).join("") || `<p class="hint">Belum ada dokumentasi. Tambahkan dokumentasi qurban tahun sebelumnya.</p>`;
+    D.forEach((d) => galeriEditor("#qbg-" + d.k, d.gal));
+    $$("[data-hapus]").forEach((b) => b.onclick = () => { sync(); const i = D.findIndex((d) => String(d.k) === b.dataset.hapus); if (i >= 0) D.splice(i, 1); draw(); });
+  };
+  modal("Halaman publik qurban", `${field("qh_narasi", "Narasi program", h.narasi, { area: true, rows: 7, full: true, ph: "Tulis latar belakang, tujuan, dan kepercayaan program. Pisahkan paragraf dengan baris kosong.", hint: "Tampil di bagian atas halaman #/qurban untuk jamaah." })}
+    <div class="sect" style="margin-top:14px">Dokumentasi tahun sebelumnya</div>
+    <div id="qh_blok"></div>
+    <button class="btn ghost sm" id="qh_tambah">${ic("plus")} Tambah dokumentasi</button>
+    <p class="hint" style="margin-top:10px">Nama peserta yang sudah menyetor tampil otomatis, hanya nama dan paket, tanpa nominal.</p>`,
+    `<button class="btn primary sm" id="qh_s">Simpan</button>`, true);
+  draw();
+  $("#qh_tambah").onclick = () => { sync(); D.push({ k: ++seq, judul: "", tahun: "", video: "", gal: { ids: [], cover: null } }); draw(); };
+  $("#qh_s").onclick = (e) => busy(e.target, async () => {
+    sync();
+    const body = { narasi: $("#qh_narasi").value, dokumentasi: D.map((d) => ({ judul: d.judul, tahun: d.tahun,
+      video: d.video.split("\n").map((x) => x.trim()).filter(Boolean),
+      galeri: d.gal.cover ? [d.gal.cover, ...d.gal.ids.filter((i) => i !== d.gal.cover)] : d.gal.ids })) };
+    await api("admin/qurban/halaman", { method: "POST", body });
+    closeModal(); toast("Halaman qurban disimpan. Cek tampilannya di halaman #/qurban.");
+  });
+}
 function qbMusimForm(m) {
   const v = m || { tahun_hijriah: "1448 H", harga_kambing: 2400000, harga_sapi_bagian: 2100000, min_setoran: 50000, kuota: 0, status: "buka", komisi_persen: null };
   modal(m ? "Musim & harga qurban" : "Musim qurban baru", `<div class="fg">
