@@ -238,11 +238,12 @@ function short(v) { return v >= 1e6 ? (v / 1e6).toLocaleString("id-ID", { maximu
 VIEWS.donasi = async () => {
   const qs = new URLSearchParams(location.hash.split("?")[1] || "");
   const bukaId = (qs.get("id") || "").replace(/[^\w]/g, "");
-  const f = { status: qs.get("status") || "", jenis: "", campaign: "", metode: "", dari: "", sampai: "", q: bukaId, page: 1 };
+  const f = { status: qs.get("status") || "", sumber: "", jenis: "", campaign: "", metode: "", dari: "", sampai: "", q: bukaId, page: 1 };
   main(`<div class="ph"><h1>Donasi</h1><div class="acts"><a class="btn ghost sm" id="exp" href="#">${ic("download")} Ekspor Excel (CSV)</a>${can("catat") ? `<button class="btn primary sm" onclick="offlineForm()">${ic("plus")} Catat donasi offline</button>` : ""}</div></div>
     <div class="fbar">
       <div class="inp grow"><input id="f_q" placeholder="Cari nama, WA, no. transaksi, kode kotak/pundi"></div>
       <div class="inp"><select id="f_status"><option value="">Semua status</option>${Object.entries({ ...STATUS, tanpa_bukti: "Belum kirim bukti (transfer/QRIS)" }).map(([k, l]) => `<option value="${k}" ${f.status === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+      <div class="inp"><select id="f_sumber"><option value="">Donasi program</option><option value="zisko">Pundi Sedekah (ZISKO)</option></select></div>
       <div class="inp"><select id="f_jenis"><option value="">Semua dana</option><option value="zakat">Zakat</option><option value="infak">Infak</option><option value="wakaf">Wakaf</option><option value="fidyah">Fidyah</option></select></div>
       <div class="inp"><select id="f_campaign"><option value="">Semua program</option>${CAMPS.map((c) => `<option value="${c.id}">${esc(c.judul)}</option>`).join("")}</select></div>
       <div class="inp"><select id="f_metode"><option value="">Semua metode</option>${Object.entries(METODE).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></div>
@@ -269,7 +270,7 @@ VIEWS.donasi = async () => {
     $$("tr[data-id]").forEach((tr) => tr.onclick = () => donDetail(r.rows.find((x) => x.id === tr.dataset.id), load));
   };
   let t; $("#f_q").oninput = () => { clearTimeout(t); t = setTimeout(() => { f.q = val("f_q"); f.page = 1; load(); }, 350); };
-  ["status", "jenis", "campaign", "metode", "dari", "sampai"].forEach((k) => $("#f_" + k).onchange = () => { f[k] = $("#f_" + k).value; f.page = 1; load(); });
+  ["status", "sumber", "jenis", "campaign", "metode", "dari", "sampai"].forEach((k) => $("#f_" + k).onchange = () => { f[k] = $("#f_" + k).value; f.page = 1; load(); });
   if (bukaId) $("#f_q").value = bukaId;
   await load();
   if (bukaId) { $(`tr[data-id="${bukaId}"]`)?.click(); history.replaceState(null, "", "#donasi"); }
