@@ -516,7 +516,7 @@ VIEWS.qurban = async () => {
   main(`<div class="ph"><h1>Tabungan qurban</h1><div class="acts">
       <button class="btn ghost sm" onclick="copy('${location.origin}/#/qurban','Tautan pendaftaran qurban')">${ic("copy")} Salin tautan</button>
       <button class="btn ghost sm" id="qb_halaman">${ic("grid")} Halaman publik</button>
-      <button class="btn ghost sm" id="qb_ubah">${ic("gear")} Musim & harga</button>
+      <button class="btn ghost sm" id="qb_ubah">${ic("gear")} Ubah musim ini</button>
       <button class="btn primary sm" id="qb_baru">${ic("plus")} Musim baru</button></div></div>
     <div class="fg" style="margin-bottom:12px"><div><label class="f" for="qb_pilih">Musim</label><div class="inp"><select id="qb_pilih">${D.musim_list.map((x) => `<option value="${x.id}" ${x.id === m.id ? "selected" : ""}>${esc(x.tahun_hijriah)} · pelunasan ${tglD(x.batas_pelunasan + " 00:00:00")} · ${x.status === "buka" ? "dibuka" : "ditutup"}</option>`).join("")}</select></div></div></div>
     <div class="kpis">
@@ -603,7 +603,11 @@ function qbMusimForm(m) {
     ${field("qm_status", "Pendaftaran", v.status || "buka", { sel: [["buka", "Dibuka"], ["tutup", "Ditutup"]] })}
     ${field("qm_cat", "Catatan", v.catatan || "", { full: true })}
   </div><p class="hint" style="margin-top:8px">Harga yang sudah dikunci saat peserta mendaftar tidak berubah. Perubahan harga hanya berlaku untuk pendaftar berikutnya.</p>`,
-    `<button class="btn primary sm" id="qm_s">Simpan</button>`, true);
+    `${m ? `<button class="btn danger sm" id="qm_del">Hapus musim</button>` : ""}<button class="btn primary sm" id="qm_s">Simpan</button>`, true);
+  if (m) $("#qm_del").onclick = async () => {
+    if ($("#qm_del").dataset.ok !== "1") { $("#qm_del").dataset.ok = "1"; $("#qm_del").textContent = "Klik lagi untuk hapus"; return; }
+    const r = await api("admin/qurban/musim/" + m.id, { method: "DELETE" }); closeModal(); toast(r.info); VIEWS.qurban();
+  };
   $("#qm_s").onclick = (e) => busy(e.target, async () => {
     const komisi = val("qm_kom");
     await api("admin/qurban/musim", { method: "POST", body: { id: m ? m.id : null, tahun_hijriah: val("qm_thn"), tanggal_idul_adha: val("qm_idul"), batas_pelunasan: val("qm_batas"),
