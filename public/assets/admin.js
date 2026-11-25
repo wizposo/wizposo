@@ -1221,6 +1221,7 @@ VIEWS.pengaturan = async () => {
         <label class="chk"><input type="checkbox" id="s_nd" ${s.notif_donatur ? "checked" : ""}> Kirim kuitansi ke donatur</label>
         <label class="chk"><input type="checkbox" id="s_na" ${s.notif_admin ? "checked" : ""}> Beri tahu admin setiap donasi online</label>
         <label class="chk"><input type="checkbox" id="s_nf" ${s.notif_fundraiser ? "checked" : ""}> Beri tahu fundraiser saat ajakannya berhasil</label>
+        <label class="chk"><input type="checkbox" id="s_np" ${s.notif_pundi ? "checked" : ""}> Salin semua notifikasi admin ke Koordinator pundi${s.wa_pundi ? "" : " <small>(isi nomor Koordinator pundi di Layanan dulu)</small>"}</label>
         <div style="display:flex;gap:8px;margin-top:12px"><div class="inp" style="flex:1"><span>+62</span><input id="t_wa" inputmode="numeric" placeholder="Nomor uji"></div><button class="btn ghost sm" id="t_go">Kirim tes</button></div></div>
       <div class="panel" style="margin-top:16px"><h2>Fundraiser</h2>
         <label class="chk"><input type="checkbox" id="s_fa" ${s.fr_auto_aktif ? "checked" : ""}> Fundraiser baru langsung aktif</label>
@@ -1244,7 +1245,7 @@ VIEWS.pengaturan = async () => {
         harga_emas: num(val("s_emas")), nisab_gram: num(val("s_nisab")), harga_beras: num(val("s_beras")), beras_per_jiwa: parseFloat(val("s_kg").replace(",", ".")) || 2.5,
         pundi_jadwal: val("s_pj"), pundi_wilayah: val("s_pw"), kantor_alamat: val("s_ktr"), call_center: val("s_cc"), kode_cabang: val("s_kode").toUpperCase(),
         kab_default: val("s_kab"), provinsi_default: val("s_prov"), jemput_tanggal: Math.min(28, Math.max(1, num(val("s_jt")) || 10)), amplop_periode: val("s_ap"), midtrans_production: $("#s_mtp").checked, notif_donatur: $("#s_nd").checked, notif_admin: $("#s_na").checked,
-        notif_fundraiser: $("#s_nf").checked, fr_auto_aktif: $("#s_fa").checked, fr_apresiasi: val("s_fap"), upah_afiliator_persen: Math.min(100, Number(val("s_upa").replace(",", ".")) || 0), upah_zisko_persen: Math.min(100, Number(val("s_upz").replace(",", ".")) || 0), tarik_min: num(val("s_tmin")) };
+        notif_fundraiser: $("#s_nf").checked, notif_pundi: $("#s_np").checked, fr_auto_aktif: $("#s_fa").checked, fr_apresiasi: val("s_fap"), upah_afiliator_persen: Math.min(100, Number(val("s_upa").replace(",", ".")) || 0), upah_zisko_persen: Math.min(100, Number(val("s_upz").replace(",", ".")) || 0), tarik_min: num(val("s_tmin")) };
       if ($("#s_mt")) body.midtrans_server_key = val("s_mt"); if ($("#s_fn")) body.fonnte_token = val("s_fn");
       await api("admin/settings", { method: "PUT", body }); PUB = await api("public/config"); toast("Pengaturan disimpan"); VIEWS.pengaturan();
     } catch (x) { toast(x.message); } finally { b.disabled = false; }
